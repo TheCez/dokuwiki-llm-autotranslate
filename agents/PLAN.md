@@ -175,12 +175,26 @@ pass recorded in this file's notes.
 
 - [x] Slice 1 - Rename and backend config scaffold (done, verified)
 - [x] Slice 2 - LLM translation engine, editor mode (done; unit-verified)
-- [ ] Slice 3 - Direct mode and push translation on LLM
+- [x] Slice 3 - Direct mode and push translation on LLM (done; live-verified)
 - [ ] Slice 4 - Glossary via prompt injection
 - [ ] Slice 5 - Hardening, i18n, docs
 
 ### Notes
 (Record decisions, deviations, and E2E verification results here as slices complete.)
+
+**Slice 3 (done):** Routed `autotrans_direct()` and `push_translate()` through the `translate()`
+dispatcher (all three entry paths now use the backend). Added live LLM integration test infra:
+`tests/bootstrap.php` (loads `.env` into env vars - the ONLY reader of `.env`),
+`tests/CurlHttpTransport.php` (real curl transport for tests), `tests/LiveLlmIntegrationTest.php`
+(uses the real default prompt from conf/default.php; asserts `<ignore>` blocks preserved + text
+translated; self-skips without creds), `.env.example`, `.gitignore` += `.env`/`.env.local`.
+Secrets: `.env` is gitignored and never read by any agent (orchestrator or subagent) - only the
+bootstrap script reads it. Hardening for test runs: `zend.exception_ignore_args=On`,
+`display_errors=Off`, and the key never appears in any exception/log/print.
+Env: PHP curl needed a CA bundle - downloaded `cacert.pem` to `C:/Users/ajayc/cacert.pem` and set
+`curl.cainfo`/`openssl.cafile` in the scoop php.ini (use forward slashes to avoid escaping issues).
+Verification: full suite `OK (33 tests, 56 assertions)` including the live test hitting the real
+endpoint; removed a `curl_close()` PHP 8.5 deprecation in the test transport.
 
 **Environment:** PHP was not installed on this machine. Installed PHP 8.5.8 via `scoop install php`
 (shim at `~/scoop/shims/php`). Composer 2.10.2 via `scoop install composer`. The scoop PHP shipped

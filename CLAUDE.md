@@ -99,8 +99,11 @@ idle-based completion, auto-close).
   its own **git worktree** (`git worktree add ../wt-slice<N> -b slice-<N>-<slug>`) so the coder
   subagent works in an isolated directory (`-Cwd <worktree>`).
 - After a slice is coded, tested, and verified: commit in the worktree, `git push -u origin`, and
-  open a PR with `gh pr create --base main` into `TheCez/dokuwiki-llm-autotranslate` (the fork
-  `origin`). Then remove the worktree. Only then start the next slice.
+  open a PR into `main` on `TheCez/dokuwiki-llm-autotranslate` (the fork `origin`). Then remove the
+  worktree. Only then start the next slice.
+- Use the **`github-pr` skill** for the mechanics: `worktree.ps1 -Action create/remove` and
+  `open-pr.ps1` (commit + push + idempotent PR). Dispatch coder/tester subagents with the
+  **`herdr-subagent` skill**. Both skills are global and self-contained.
 - Commit identity: `TheCez <achodankar28@gmail.com>`. No co-author trailers. No em dashes.
 
 ### Engineering standards

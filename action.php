@@ -9,6 +9,12 @@ if(!defined('DOKU_INC')) die();
 
 use \dokuwiki\HTTP\DokuHTTPClient;
 use \dokuwiki\plugin\llmautotranslate\MenuItem;
+use \dokuwiki\plugin\llmautotranslate\DokuHttpTransport;
+use \dokuwiki\plugin\llmautotranslate\LlmClient;
+use \dokuwiki\plugin\llmautotranslate\LlmException;
+use \dokuwiki\plugin\llmautotranslate\PromptBuilder;
+use \dokuwiki\plugin\llmautotranslate\TranslationValidator;
+use \dokuwiki\plugin\llmautotranslate\TranslationValidationException;
 
 class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
 
@@ -230,7 +236,7 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         $org_page_info = $this->get_org_page_info();
 
         try {
-            $event->data['tpl'] = $this->deepl_translate($org_page_info["text"], $this->get_target_lang(), $org_page_info["ns"]);
+            $event->data['tpl'] = $this->translate($org_page_info["text"], $this->get_target_lang(), $org_page_info["ns"]);
         } catch (\Exception $e) {
             msg($e->getMessage(), -1);
             return;
@@ -686,6 +692,57 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         }
 
         return true;
+    }
+
+    private function translate($text, $target_lang, $org_ns): string {
+        if ($this->getConf('backend') === 'llm') {
+            return $this->llm_translate($text, $target_lang, $org_ns);
+        }
+
+        return $this->deepl_translate($text, $target_lang, $org_ns);
+    }
+
+    private function llm_translate($text, $target_lang, $org_ns): string {
+        $apiUrl = trim($this->getConf('llm_api_url'));
+        $apiKey = trim($this->getConf('llm_api_key'));
+        $model = trim($this->getConf('llm_model'));
+
+        if (!$apiUrl or !$apiKey or !$model) {
+            throw new \Exception($this->getLang('msg_llm_not_configured'), 400);
+        }
+
+        $text = $this->patch_links($text, $target_lang, $org_ns);
+
+        $input = $this->insert_ignore_tags($text);
+
+        $sourceLang = strtoupper(substr($this->get_default_lang(), 0, 2));
+        $targetLang = $this->langs[$target_lang];
+
+        $prompt = (new PromptBuilder())->build($this->getConf('llm_prompt'), $sourceLang, $targetLang, []);
+
+        $client = new LlmClient(new DokuHttpTransport(), $apiUrl, $apiKey, $model);
+
+        try {
+            $raw = $client->translate($prompt, $input);
+        } catch (LlmException $e) {
+            if ($this->getConf('api_log_errors')) {
+                $logger = \dokuwiki\Logger::getInstance('llmautotranslate');
+                $logger->log($e->getMessage(), $input);
+            }
+            throw new \Exception($this->getLang('msg_llm_request_failed'), $e->getCode() ?: 500);
+        }
+
+        try {
+            $validated = (new TranslationValidator())->validate($input, $raw);
+        } catch (TranslationValidationException $e) {
+            if ($this->getConf('api_log_errors')) {
+                $logger = \dokuwiki\Logger::getInstance('llmautotranslate');
+                $logger->log($e->getMessage(), $raw);
+            }
+            throw new \Exception($this->getLang('msg_llm_validation_failed'), 502);
+        }
+
+        return $this->remove_ignore_tags($validated);
     }
 
     private function deepl_translate($text, $target_lang, $org_ns): string {

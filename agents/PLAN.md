@@ -174,7 +174,7 @@ pass recorded in this file's notes.
 ## Progress
 
 - [x] Slice 1 - Rename and backend config scaffold (done, verified)
-- [ ] Slice 2 - LLM translation engine, editor mode E2E
+- [x] Slice 2 - LLM translation engine, editor mode (done; unit-verified)
 - [ ] Slice 3 - Direct mode and push translation on LLM
 - [ ] Slice 4 - Glossary via prompt injection
 - [ ] Slice 5 - Hardening, i18n, docs
@@ -183,7 +183,31 @@ pass recorded in this file's notes.
 (Record decisions, deviations, and E2E verification results here as slices complete.)
 
 **Environment:** PHP was not installed on this machine. Installed PHP 8.5.8 via `scoop install php`
-(shim at `~/scoop/shims/php`). Use it for `php -l` and for PHPUnit in later slices.
+(shim at `~/scoop/shims/php`). Composer 2.10.2 via `scoop install composer`. The scoop PHP shipped
+with no `php.ini`; created `~/scoop/apps/php/current/php.ini` from `php.ini-production` enabling
+`openssl`, `mbstring`, `curl` (needed for Composer + the suite). Run tests:
+`cd <worktree> && composer install && php vendor/bin/phpunit`.
+
+**Slice 2 (done):** Coder (Sonnet) added pure classes `PromptBuilder`, `LlmClient` (HTTP via
+injected `HttpTransport`), `TranslationValidator` (code-fence/preamble strip + `<ignore>` multiset
+equality + length-ratio guard), `LlmException`, `TranslationValidationException`, and thin
+`DokuHttpTransport`. Wired `action.php`: `translate()` backend dispatcher + `llm_translate()`
+reusing `patch_links`/`insert_ignore_tags`/`remove_ignore_tags`; `autotrans_editor()` routed through
+it. `deepl_translate`, `autotrans_direct`, `push_translate` untouched (Slice 3). Added en/de error
+strings, `composer.json`, `phpunit.xml`, `.gitignore` (/vendor, /composer.lock). Tester (Sonnet)
+hardened coverage to 32 tests / 50 assertions (all green), no implementation bugs found.
+Orchestrator verified: all PHP lint-clean; `action.php` diff reviewed; full suite green.
+
+**Verification limit:** full in-DokuWiki E2E (editor fills with a live LLM translation) needs a
+running wiki + a real OpenAI-compatible endpoint, which this environment lacks. Slice 2 is verified
+by the unit suite (pure logic) + static review of the DokuWiki-coupled wiring + lint. A manual
+in-wiki E2E remains as a checkout step when an endpoint is available.
+
+**Follow-up (Slice 5):** `TranslationValidator::extractIgnoreBlocks` uses a non-greedy regex that
+only matches one level of `<ignore>` nesting. `insert_ignore_tags` does emit doubly-nested blocks
+(e.g. for `''`, `//`, `**`, `__`, `\\`). Harmless for the equality check (input and output parse
+identically, confirmed by test), but tampering hidden in the nested "gap" could slip through.
+Consider a nesting-aware check or normalization in Slice 5.
 
 **Slice 1 (done):** Coder (Sonnet) renamed base `deeplautotranslate` -> `llmautotranslate` across
 action.php, remote.php, MenuItem.php, plugin.info.txt, readme.md (class names, namespace,

@@ -10,6 +10,10 @@ $lang['msg_translation_fail_invalid_glossary'] = 'Automatic translation failed b
 $lang['msg_translation_fail_invalid_lang'] = 'Invalid language: ';
 $lang['msg_translation_fail_no_permissions'] = 'No permissions for the page: ';
 
+$lang['msg_llm_not_configured'] = 'LLM translation failed: the API URL, key, or model is not configured!';
+$lang['msg_llm_request_failed'] = 'LLM translation failed: the request to the LLM API failed!';
+$lang['msg_llm_validation_failed'] = 'LLM translation failed: the response did not pass validation (protected content changed or length implausible)!';
+
 $lang['msg_bad_key'] = 'The DeepL-API-Key is invalid!';
 
 $lang['msg_glossary_create_fail'] = 'The creation of the glossary failed!';

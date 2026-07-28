@@ -18,5 +18,6 @@ $meta['backend'] = array('multichoice', '_choices' => array('llm', 'deepl'));
 $meta['llm_api_url'] = array('string');
 $meta['llm_api_key'] = array('string');
 $meta['llm_model'] = array('string');
+$meta['llm_timeout'] = array('numeric');
 // DokuWiki core config manager has no multiline type; a single-line string is acceptable for now.
 $meta['llm_prompt'] = array('string');

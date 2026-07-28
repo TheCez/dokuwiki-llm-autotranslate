@@ -17,5 +17,6 @@ $lang['backend'] = 'Zu verwendendes Übersetzungs-Backend';
 $lang['llm_api_url'] = 'LLM-API-URL (OpenAI-kompatibler chat/completions-Endpunkt)';
 $lang['llm_api_key'] = 'LLM-API-Schlüssel';
 $lang['llm_model'] = 'LLM-Modellname';
+$lang['llm_timeout'] = 'LLM-Anfrage-Timeout in Sekunden';
 $lang['llm_prompt'] = 'LLM-Übersetzungs-Prompt (Platzhalter: {{source_lang}}, {{target_lang}}, {{glossary}})';
 

@@ -65,8 +65,43 @@ class TranslationValidator {
         return $out;
     }
 
+    /**
+     * Extract the top-level, balanced <ignore>...</ignore> regions from $text.
+     *
+     * insert_ignore_tags() emits doubly-nested blocks (e.g. for '', //, **, __, \\),
+     * so this tracks nesting depth rather than matching non-greedy up to the first
+     * closing tag. Each returned entry spans from a depth-0 opening tag through the
+     * closing tag that brings the depth back to 0, including all nested content.
+     * Malformed input (unbalanced closing tag, or unclosed tag at end of string) is
+     * handled gracefully and never causes this to throw.
+     */
     private function extractIgnoreBlocks(string $text): array {
-        preg_match_all('/<ignore>[\s\S]*?<\/ignore>/', $text, $matches);
-        return $matches[0];
+        preg_match_all('/<ignore>|<\/ignore>/', $text, $matches, PREG_OFFSET_CAPTURE);
+
+        $blocks = [];
+        $depth = 0;
+        $start = null;
+
+        foreach ($matches[0] as [$token, $offset]) {
+            if ($token === '<ignore>') {
+                if ($depth === 0) {
+                    $start = $offset;
+                }
+                $depth++;
+            } else {
+                if ($depth === 0) {
+                    // unbalanced closing tag with no open block - skip it
+                    continue;
+                }
+                $depth--;
+                if ($depth === 0 && $start !== null) {
+                    $end = $offset + strlen($token);
+                    $blocks[] = substr($text, $start, $end - $start);
+                    $start = null;
+                }
+            }
+        }
+
+        return $blocks;
     }
 }

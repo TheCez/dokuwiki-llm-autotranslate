@@ -177,10 +177,18 @@ pass recorded in this file's notes.
 - [x] Slice 2 - LLM translation engine, editor mode (done; unit-verified)
 - [x] Slice 3 - Direct mode and push translation on LLM (done; live-verified)
 - [x] Slice 4 - Glossary via prompt injection (done)
-- [ ] Slice 5 - Hardening, i18n, docs
+- [x] Slice 5 - Hardening, i18n, docs (done; full suite live-green)
 
 ### Notes
 (Record decisions, deviations, and E2E verification results here as slices complete.)
+
+**Slice 5 (done):** Made `TranslationValidator::extractIgnoreBlocks()` nesting-aware (depth-tracked
+scan returning top-level balanced blocks incl. nested content; malformed input handled without
+throwing) - closes the Slice 2 follow-up. Clarified DeepL-specific settings labels (api_key/api) in
+en/de; verified every metadata key and all `msg_llm_*` strings exist in both languages. Rewrote
+readme.md for the dual backend + LLM settings + glossary-via-prompt. Updated plugin.info.txt desc
+(and name -> "LLM Autotranslate Plugin"). Final verification: full suite LIVE-green against the real
+endpoint - `OK (54 tests, 80 assertions)`, no skips. All 5 slices complete.
 
 **Slice 4 (done):** Glossary via prompt injection for the llm backend. New pure `GlossaryParser`
 (parses `| src | target |` rows, skips the `^`-header and empty rows). `action.php`:

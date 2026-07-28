@@ -172,4 +172,101 @@ class TranslationValidatorTest extends TestCase {
 
         $this->assertSame($output, $validator->validate($input, $output));
     }
+
+    public function testDoublyNestedBlockIsOneTopLevelBlockAndIsPreserved(): void {
+        $validator = new TranslationValidator();
+        $input = "Hello <ignore><ignore>''</ignore></ignore> world";
+        $output = "Hallo <ignore><ignore>''</ignore></ignore> Welt";
+
+        $this->assertSame($output, $validator->validate($input, $output));
+    }
+
+    public function testTamperingInsideNestedBlockIsDetected(): void {
+        $validator = new TranslationValidator();
+        $input = "Hello <ignore><ignore>''</ignore></ignore> world";
+        $output = "Hallo <ignore><ignore>XX</ignore></ignore> Welt";
+
+        $this->expectException(TranslationValidationException::class);
+        $validator->validate($input, $output);
+    }
+
+    public function testAdjacentTopLevelBlocksAreExtractedSeparately(): void {
+        $validator = new TranslationValidator();
+        $input = '<ignore>[[a]]</ignore><ignore>[[b]]</ignore> Hello world';
+        $output = '<ignore>[[a]]</ignore><ignore>[[b]]</ignore> Hallo Welt';
+
+        $this->assertSame($output, $validator->validate($input, $output));
+    }
+
+    public function testUnbalancedClosingTagInInputDoesNotCrash(): void {
+        $validator = new TranslationValidator();
+        $input = 'Hello </ignore> <ignore>[[start]]</ignore> world';
+        $output = 'Hallo </ignore> <ignore>[[start]]</ignore> Welt';
+
+        $this->assertSame($output, $validator->validate($input, $output));
+    }
+
+    public function testTripleNestedBlockIsOneTopLevelBlockAndIsPreserved(): void {
+        $validator = new TranslationValidator();
+        $input = "Hello <ignore><ignore><ignore>X</ignore></ignore></ignore> world";
+        $output = "Hallo <ignore><ignore><ignore>X</ignore></ignore></ignore> Welt";
+
+        $this->assertSame($output, $validator->validate($input, $output));
+    }
+
+    public function testTamperingAtDeepestNestingLevelOfTripleNestedBlockIsDetected(): void {
+        $validator = new TranslationValidator();
+        $input = "Hello <ignore><ignore><ignore>X</ignore></ignore></ignore> world";
+        $output = "Hallo <ignore><ignore><ignore>Y</ignore></ignore></ignore> Welt";
+
+        $this->expectException(TranslationValidationException::class);
+        $this->expectExceptionCode(1);
+        $validator->validate($input, $output);
+    }
+
+    public function testMultipleTopLevelBlocksWithDifferentNestingDepthsAreAllExtracted(): void {
+        $validator = new TranslationValidator();
+        $input = "Hello <ignore>[[a]]</ignore> middle text <ignore><ignore>[[b]]</ignore></ignore> "
+            . "more text <ignore><ignore><ignore>[[c]]</ignore></ignore></ignore> world";
+        $output = "Hallo <ignore>[[a]]</ignore> Mitteltext <ignore><ignore>[[b]]</ignore></ignore> "
+            . "mehr Text <ignore><ignore><ignore>[[c]]</ignore></ignore></ignore> Welt";
+
+        $this->assertSame($output, $validator->validate($input, $output));
+    }
+
+    public function testDroppingOneOfMultipleDifferentDepthBlocksIsDetected(): void {
+        $validator = new TranslationValidator();
+        $input = "Hello <ignore>[[a]]</ignore> middle text <ignore><ignore>[[b]]</ignore></ignore> world";
+        $output = "Hallo Mitteltext <ignore><ignore>[[b]]</ignore></ignore> Welt";
+
+        $this->expectException(TranslationValidationException::class);
+        $this->expectExceptionCode(1);
+        $validator->validate($input, $output);
+    }
+
+    public function testContentBetweenTopLevelBlocksDoesNotAffectExtraction(): void {
+        $validator = new TranslationValidator();
+        $input = "<ignore>[[a]]</ignore>" . str_repeat('lots of plain text ', 10) . "<ignore><ignore>[[b]]</ignore></ignore>";
+        $output = "<ignore>[[a]]</ignore>" . str_repeat('viel einfacher Text ', 10) . "<ignore><ignore>[[b]]</ignore></ignore>";
+
+        $this->assertSame($output, $validator->validate($input, $output));
+    }
+
+    public function testUnclosedIgnoreTagAtEndOfStringDoesNotCrash(): void {
+        $validator = new TranslationValidator();
+        $input = 'Hello <ignore>[[start]] world';
+        $output = 'Hallo <ignore>[[start]] Welt';
+
+        $this->assertSame($output, $validator->validate($input, $output));
+    }
+
+    public function testUnclosedIgnoreTagInInputWithClosedBlockAddedInOutputThrowsGracefully(): void {
+        $validator = new TranslationValidator();
+        $input = 'Hello <ignore>[[start]] world';
+        $output = 'Hallo <ignore>[[extra]]</ignore> Welt';
+
+        $this->expectException(TranslationValidationException::class);
+        $this->expectExceptionCode(1);
+        $validator->validate($input, $output);
+    }
 }

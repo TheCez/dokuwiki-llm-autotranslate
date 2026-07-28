@@ -2,6 +2,6 @@ base   llmautotranslate
 author Jennifer Graul
 email  me@netali.de
 date   2026-01-28
-name   DeepL Autotranslate Plugin
-desc   This plugin automatically translates wiki pages using the DeepL API
+name   LLM Autotranslate Plugin
+desc   Automatically translates wiki pages using an OpenAI-compatible LLM or the DeepL API
 url    https://www.dokuwiki.org/plugin:llmautotranslate

@@ -13,3 +13,9 @@ $lang['editor_regex'] = 'Editor-Regex: Alle Seitennamen und Namespaces, auf die 
 $lang['ignored_expressions'] = 'Ausdrücke, welche nicht übersetzt werden sollen, separiert von \':\'';
 $lang['default_lang_in_ns'] = 'Die Standardsprache befindet sich in einem Namespace (sollte normalerweise nicht der Fall sein)';
 
+$lang['backend'] = 'Zu verwendendes Übersetzungs-Backend';
+$lang['llm_api_url'] = 'LLM-API-URL (OpenAI-kompatibler chat/completions-Endpunkt)';
+$lang['llm_api_key'] = 'LLM-API-Schlüssel';
+$lang['llm_model'] = 'LLM-Modellname';
+$lang['llm_prompt'] = 'LLM-Übersetzungs-Prompt (Platzhalter: {{source_lang}}, {{target_lang}}, {{glossary}})';
+

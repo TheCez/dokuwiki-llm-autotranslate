@@ -13,3 +13,9 @@ $lang['editor_regex'] = 'Editor-Regex: All page names and namespaces matching th
 $lang['ignored_expressions'] = 'Expressions that won\'t be translated, seperated by \':\'';
 $lang['default_lang_in_ns'] = 'The default language is in a namespace (should normally not be the case)';
 $lang['keep_relative'] = 'Do not rewrite relative links when translating';
+
+$lang['backend'] = 'Translation backend to use';
+$lang['llm_api_url'] = 'LLM API URL (OpenAI-compatible chat/completions endpoint)';
+$lang['llm_api_key'] = 'LLM API key';
+$lang['llm_model'] = 'LLM model name';
+$lang['llm_prompt'] = 'LLM translation prompt (placeholders: {{source_lang}}, {{target_lang}}, {{glossary}})';

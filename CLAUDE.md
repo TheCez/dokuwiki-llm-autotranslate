@@ -73,23 +73,19 @@ New logic (prompt building, response cleaning, ignore-block validation, request/
 #### How to dispatch a subagent (Herdr-native - do NOT use the Agent tool, wmux, or a2a)
 
 In-process Agent/Task subagents share this one process and have no terminal, so Herdr cannot show
-them. Instead, launch each subagent as its OWN live Claude Code session in a new Herdr tab. Use the
-helper `agents/tools/run-subagent.ps1`, which encapsulates the validated mechanism:
+them. Instead, use the **`herdr-subagent` skill** (installed globally) to launch each subagent as
+its OWN live Claude Code session in a new Herdr tab:
 
 1. Write the subagent's full, self-contained brief to `agents/briefs/<label>.md`.
-2. Run (from PowerShell):
-   `agents/tools/run-subagent.ps1 -Brief agents/briefs/<label>.md -Label <label> -Cwd <workdir>`
-   It: opens a new tab; launches `claude --model sonnet --dangerously-skip-permissions` with the
-   brief supplied AS THE PROMPT AT LAUNCH (via `Get-Content -Raw`, so long briefs survive Windows
-   quoting); waits for the agent to finish via `herdr agent wait --status idle` (never text-match
-   for completion - a brief may contain any sentinel); reads the transcript tail; and CLOSES the
-   tab once done.
-3. The orchestrator then verifies the actual file changes / test output directly (not just the
-   transcript), since the subagent ran in a separate process.
+2. Run its script:
+   `powershell -NoProfile -File C:\Users\ajayc\.claude\skills\herdr-subagent\scripts\run-subagent.ps1 -Brief agents\briefs\<label>.md -Label <label> -Cwd <workdir>`
+   It opens a new tab, launches Sonnet with the brief as the launch-time prompt, waits for idle,
+   prints the transcript tail, and closes the tab.
+3. Then verify the actual file changes / test output directly (not just the transcript), since the
+   subagent ran in a separate process.
 
-Key rules baked into the mechanism: separate live tab per subagent (never a pane split); Sonnet
-only; prompt at launch (never `pane send-text` injection); detect completion via idle status;
-close the tab when the task is done.
+The skill's SKILL.md documents the guarantees (separate live tab, Sonnet only, prompt-at-launch,
+idle-based completion, auto-close).
 
 ### Vertical slices (do not deviate)
 

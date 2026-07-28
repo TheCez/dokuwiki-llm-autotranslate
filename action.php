@@ -758,7 +758,8 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
 
         $prompt = (new PromptBuilder())->build($this->getConf('llm_prompt'), $sourceLang, $targetLang, $glossary);
 
-        $client = new LlmClient(new DokuHttpTransport(), $apiUrl, $apiKey, $model);
+        $timeout = (int) $this->getConf('llm_timeout');
+        $client = new LlmClient(new DokuHttpTransport($timeout), $apiUrl, $apiKey, $model);
 
         try {
             $raw = $client->translate($prompt, $input);

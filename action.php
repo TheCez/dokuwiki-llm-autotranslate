@@ -12,6 +12,7 @@ use \dokuwiki\plugin\llmautotranslate\MenuItem;
 use \dokuwiki\plugin\llmautotranslate\DokuHttpTransport;
 use \dokuwiki\plugin\llmautotranslate\LlmClient;
 use \dokuwiki\plugin\llmautotranslate\LlmException;
+use \dokuwiki\plugin\llmautotranslate\GlossaryParser;
 use \dokuwiki\plugin\llmautotranslate\PromptBuilder;
 use \dokuwiki\plugin\llmautotranslate\TranslationValidator;
 use \dokuwiki\plugin\llmautotranslate\TranslationValidationException;
@@ -136,6 +137,10 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         global $ID;
         // this also checks if the glossary feature is enabled
         if (!$this->check_in_glossary_ns()) return;
+
+        // under the llm backend the definition page itself is the glossary source of truth,
+        // so no DeepL glossary object needs to be created/deleted
+        if ($this->getConf('backend') === 'llm') return;
 
         $glossary_ns = $this->get_glossary_ns();
 
@@ -348,6 +353,16 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         return trim(strtolower($this->getConf('glossary_ns')));
     }
 
+    private function get_glossary_pairs($src2, $target2): array {
+        $ns = $this->get_glossary_ns();
+        if (!$ns) return [];
+
+        $id = $ns . ':' . $src2 . '_' . $target2;
+        if (!page_exists($id)) return [];
+
+        return (new GlossaryParser())->parse(rawWiki($id));
+    }
+
     private function get_mode(): string {
         global $ID;
         if ($this->getConf('editor_regex')) {
@@ -393,6 +408,22 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
     }
 
     private function get_available_glossaries(): array {
+        if ($this->getConf('backend') === 'llm') {
+            $src = substr($this->get_default_lang(), 0, 2);
+
+            $target_codes = [];
+            foreach (array_keys($this->langs) as $lang) {
+                $target_codes[substr($lang, 0, 2)] = true;
+            }
+
+            $glossaries = [];
+            foreach (array_keys($target_codes) as $target) {
+                $glossaries[] = ['source_lang' => $src, 'target_lang' => $target];
+            }
+
+            return $glossaries;
+        }
+
         if (!trim($this->getConf('api_key'))) {
             msg($this->getLang('msg_bad_key'), -1);
             return array();
@@ -528,6 +559,9 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
 
     private function check_glossary_supported($src, $target): bool {
         if(strlen($src) != 2 or strlen($target) != 2) return false;
+
+        if ($this->getConf('backend') === 'llm') return true;
+
         $available_glossaries = $this->get_available_glossaries();
         foreach ($available_glossaries as $glossary) {
             if ($src == $glossary['source_lang'] and $target == $glossary['target_lang']) return true;
@@ -718,7 +752,11 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         $sourceLang = strtoupper(substr($this->get_default_lang(), 0, 2));
         $targetLang = $this->langs[$target_lang];
 
-        $prompt = (new PromptBuilder())->build($this->getConf('llm_prompt'), $sourceLang, $targetLang, []);
+        $src2 = strtolower(substr($this->get_default_lang(), 0, 2));
+        $target2 = strtolower(substr($target_lang, 0, 2));
+        $glossary = $this->get_glossary_pairs($src2, $target2);
+
+        $prompt = (new PromptBuilder())->build($this->getConf('llm_prompt'), $sourceLang, $targetLang, $glossary);
 
         $client = new LlmClient(new DokuHttpTransport(), $apiUrl, $apiKey, $model);
 

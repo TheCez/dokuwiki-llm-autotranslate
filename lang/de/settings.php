@@ -1,7 +1,7 @@
 <?php
 
-$lang['api_key'] = 'DeepL-API-Key';
-$lang['api'] = 'DeepL-API, die verwendet werden soll';
+$lang['api_key'] = 'DeepL-API-Schlüssel (wird nur verwendet, wenn als Backend DeepL eingestellt ist)';
+$lang['api'] = 'Zu verwendende DeepL-API-Stufe, free oder pro (wird nur verwendet, wenn als Backend DeepL eingestellt ist)';
 $lang['api_log_errors'] = 'API-Fehler loggen';
 $lang['mode'] = 'Standard-Modus des Plugins';
 $lang['show_button'] = 'Button für erzwungene Übersetzungen anzeigen';

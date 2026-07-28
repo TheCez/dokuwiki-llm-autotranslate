@@ -214,7 +214,7 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
 
         $org_page_info = $this->get_org_page_info();
         try {
-            $translated_text = $this->deepl_translate($org_page_info["text"], $this->get_target_lang(), $org_page_info["ns"]);
+            $translated_text = $this->translate($org_page_info["text"], $this->get_target_lang(), $org_page_info["ns"]);
         } catch (\Exception $e) {
             msg($e->getMessage(), -1);
             return;
@@ -300,7 +300,7 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
             throw new \Exception($this->getLang('msg_translation_fail_no_permissions') . $lang_id, 403);
         }
 
-        $translated_text = $this->deepl_translate($org_page_text, $lang, getNS($id));
+        $translated_text = $this->translate($org_page_text, $lang, getNS($id));
         saveWikiText($lang_id, $translated_text, 'Automatic push translation');
 
         return $lang_id;

@@ -767,7 +767,7 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
                 $logger = \dokuwiki\Logger::getInstance('llmautotranslate');
                 $logger->log($e->getMessage(), $input);
             }
-            throw new \Exception($this->getLang('msg_llm_request_failed'), $e->getCode() ?: 500);
+            throw new \Exception($this->getLang('msg_llm_request_failed') . ' (' . $e->getMessage() . ')', $e->getCode() ?: 500);
         }
 
         try {
@@ -777,7 +777,7 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
                 $logger = \dokuwiki\Logger::getInstance('llmautotranslate');
                 $logger->log($e->getMessage(), $raw);
             }
-            throw new \Exception($this->getLang('msg_llm_validation_failed'), 502);
+            throw new \Exception($this->getLang('msg_llm_validation_failed') . ' (' . $e->getMessage() . ')', 502);
         }
 
         return $this->remove_ignore_tags($validated);

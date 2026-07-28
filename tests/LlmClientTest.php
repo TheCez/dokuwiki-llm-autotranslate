@@ -101,4 +101,38 @@ class LlmClientTest extends TestCase {
         $this->expectExceptionCode(502);
         $client->translate('prompt', 'text');
     }
+
+    public function testErrorStatusMessageContainsResponseBodyDetail(): void {
+        $transport = new FakeHttpTransport([
+            'status' => 500,
+            'body' => json_encode(['error' => ['message' => 'boom']]),
+        ]);
+
+        $client = new LlmClient($transport, 'https://example.com', 'key', 'model');
+
+        try {
+            $client->translate('prompt', 'text');
+            $this->fail('Expected LlmException was not thrown.');
+        } catch (LlmException $e) {
+            $this->assertStringContainsString('boom', $e->getMessage());
+            $this->assertSame(500, $e->getCode());
+        }
+    }
+
+    public function testTransportFailureMessageContainsDokuWikiErrorDetail(): void {
+        $transport = new FakeHttpTransport([
+            'status' => -100,
+            'body' => 'Could not connect to host: certificate verify failed',
+        ]);
+
+        $client = new LlmClient($transport, 'https://example.com', 'key', 'model');
+
+        try {
+            $client->translate('prompt', 'text');
+            $this->fail('Expected LlmException was not thrown.');
+        } catch (LlmException $e) {
+            $this->assertStringContainsString('certificate verify failed', $e->getMessage());
+            $this->assertSame(-100, $e->getCode());
+        }
+    }
 }

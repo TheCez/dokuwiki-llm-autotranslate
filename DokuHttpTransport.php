@@ -10,6 +10,10 @@ class DokuHttpTransport implements HttpTransport {
         $http->keep_alive = false;
         $http->headers = $headers;
         $http->sendRequest($url, $body, 'POST');
-        return ['status' => (int)$http->status, 'body' => (string)$http->resp_body];
+        $respBody = (string)$http->resp_body;
+        if ($respBody === '' && !empty($http->error)) {
+            $respBody = (string)$http->error;
+        }
+        return ['status' => (int)$http->status, 'body' => $respBody];
     }
 }

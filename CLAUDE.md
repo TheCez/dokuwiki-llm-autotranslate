@@ -93,6 +93,16 @@ idle-based completion, auto-close).
 - A slice is not done until it is coded, tested, and verified end-to-end. Only then start the next slice.
 - The slice list and acceptance criteria live in `agents/PLAN.md`. Keep it updated as slices complete.
 
+### Git workflow (per slice)
+
+- Never commit slice work directly to `main`. Each slice gets its own branch, and (from Slice 2 on)
+  its own **git worktree** (`git worktree add ../wt-slice<N> -b slice-<N>-<slug>`) so the coder
+  subagent works in an isolated directory (`-Cwd <worktree>`).
+- After a slice is coded, tested, and verified: commit in the worktree, `git push -u origin`, and
+  open a PR with `gh pr create --base main` into `TheCez/dokuwiki-llm-autotranslate` (the fork
+  `origin`). Then remove the worktree. Only then start the next slice.
+- Commit identity: `TheCez <achodankar28@gmail.com>`. No co-author trailers. No em dashes.
+
 ### Engineering standards
 
 - Prefer quality, simplicity, robustness, and long-term maintainability over speed.

@@ -33,15 +33,29 @@ class LlmClient {
         $response = $this->http->post($this->apiUrl, $headers, $body);
 
         if ($response['status'] < 200 || $response['status'] >= 300) {
-            throw new LlmException('LLM request failed with status ' . $response['status'], $response['status']);
+            throw new LlmException(
+                'LLM request failed with status ' . $response['status'] . $this->detailSuffix($response['body']),
+                $response['status']
+            );
         }
 
         $decoded = json_decode($response['body'], true);
 
         if (!isset($decoded['choices'][0]['message']['content'])) {
-            throw new LlmException('LLM response is missing choices[0].message.content', 502);
+            throw new LlmException(
+                'LLM response is missing choices[0].message.content' . $this->detailSuffix($response['body']),
+                502
+            );
         }
 
         return $decoded['choices'][0]['message']['content'];
+    }
+
+    private function detailSuffix(string $body): string {
+        $detail = trim($body);
+        if ($detail === '') return '';
+        $detail = preg_replace('/\s+/', ' ', $detail);
+        if (mb_strlen($detail) > 300) $detail = mb_substr($detail, 0, 300) . '...';
+        return ': ' . $detail;
     }
 }

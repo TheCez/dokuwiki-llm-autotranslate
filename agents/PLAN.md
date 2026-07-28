@@ -176,11 +176,20 @@ pass recorded in this file's notes.
 - [x] Slice 1 - Rename and backend config scaffold (done, verified)
 - [x] Slice 2 - LLM translation engine, editor mode (done; unit-verified)
 - [x] Slice 3 - Direct mode and push translation on LLM (done; live-verified)
-- [ ] Slice 4 - Glossary via prompt injection
+- [x] Slice 4 - Glossary via prompt injection (done)
 - [ ] Slice 5 - Hardening, i18n, docs
 
 ### Notes
 (Record decisions, deviations, and E2E verification results here as slices complete.)
+
+**Slice 4 (done):** Glossary via prompt injection for the llm backend. New pure `GlossaryParser`
+(parses `| src | target |` rows, skips the `^`-header and empty rows). `action.php`:
+`get_glossary_pairs($src2,$target2)` reads the definition page and parses it; `llm_translate()`
+injects the pairs into `PromptBuilder`'s `{{glossary}}`. DeepL glossary REST is bypassed under the
+llm backend - `update_glossary()` early-returns, `check_glossary_supported()` is a length-only
+check, `get_available_glossaries()` returns a synthetic list from `$langs` (no HTTP). DeepL backend
+glossary behavior unchanged. Tests: 43 total (GlossaryParser covered incl. whitespace/CRLF/header/
+malformed rows), 1 live-skip offline. No bugs found.
 
 **Slice 3 (done):** Routed `autotrans_direct()` and `push_translate()` through the `translate()`
 dispatcher (all three entry paths now use the backend). Added live LLM integration test infra:

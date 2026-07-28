@@ -1,6 +1,6 @@
 <?php
 
-namespace dokuwiki\plugin\deeplautotranslate;
+namespace dokuwiki\plugin\llmautotranslate;
 
 use dokuwiki\Menu\Item\AbstractItem;
 
@@ -9,7 +9,7 @@ use dokuwiki\Menu\Item\AbstractItem;
  *
  * Implements the translate button for DokuWiki's menu system
  *
- * @package dokuwiki\plugin\deeplautotranslate
+ * @package dokuwiki\plugin\llmautotranslate
  */
 class MenuItem extends AbstractItem {
     /** @var string do action for this plugin */
@@ -24,7 +24,7 @@ class MenuItem extends AbstractItem {
      * @return string
      */
     public function getLabel() {
-        $hlp = plugin_load('action', 'deeplautotranslate');
+        $hlp = plugin_load('action', 'llmautotranslate');
         return $hlp->getLang('btn_translate');
     }
 }

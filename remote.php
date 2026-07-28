@@ -4,12 +4,12 @@ use dokuwiki\Extension\RemotePlugin;
 use dokuwiki\Remote\AccessDeniedException;
 
 /**
- * DokuWiki Plugin deeplautotranslate (Remote Component)
+ * DokuWiki Plugin llmautotranslate (Remote Component)
  *
  * @license GPL 2 http://www.gnu.org/licenses/gpl-2.0.html
  * @author Andreas Gohr <gohr@cosmocode.de>
  */
-class remote_plugin_deeplautotranslate extends RemotePlugin
+class remote_plugin_llmautotranslate extends RemotePlugin
 {
     /**
      * Create a new translation of the given page in the given language
@@ -26,8 +26,8 @@ class remote_plugin_deeplautotranslate extends RemotePlugin
         $INFO['exists'] = page_exists($id);
 
 
-        /** @var action_plugin_deeplautotranslate $action */
-        $action = plugin_load('action', 'deeplautotranslate');
+        /** @var action_plugin_llmautotranslate $action */
+        $action = plugin_load('action', 'llmautotranslate');
 
         $text = rawWiki($id);
 

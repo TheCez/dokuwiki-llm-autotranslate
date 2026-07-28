@@ -8,9 +8,9 @@
 if(!defined('DOKU_INC')) die();
 
 use \dokuwiki\HTTP\DokuHTTPClient;
-use \dokuwiki\plugin\deeplautotranslate\MenuItem;
+use \dokuwiki\plugin\llmautotranslate\MenuItem;
 
-class action_plugin_deeplautotranslate extends DokuWiki_Action_Plugin {
+class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
 
     // manual mapping of ISO-languages to DeepL-languages to fix inconsistent naming
     private $langs = array(
@@ -424,12 +424,41 @@ class action_plugin_deeplautotranslate extends DokuWiki_Action_Plugin {
         return $json_response['supported_languages'];
     }
 
+    /**
+     * Path to the (new) glossary state file.
+     *
+     * Always use this for writes.
+     */
+    private function glossary_state_file(): string {
+        return DOKU_CONF . 'llm-glossaries.json';
+    }
+
+    /**
+     * Path to the glossary state file to read from.
+     *
+     * Returns the new file if it exists, otherwise falls back to the legacy
+     * 'deepl-glossaries.json' file if that exists, otherwise returns the new
+     * (not yet existing) file path. This allows existing installs to keep
+     * reading their old state until the first write migrates it.
+     */
+    private function glossary_state_file_read(): string {
+        $new_file = $this->glossary_state_file();
+        if (file_exists($new_file)) return $new_file;
+
+        $legacy_file = DOKU_CONF . 'deepl-glossaries.json';
+        if (file_exists($legacy_file)) return $legacy_file;
+
+        return $new_file;
+    }
+
     private function get_glossary_id($src, $target): string {
-        if (!file_exists(DOKU_CONF . 'deepl-glossaries.json')) return '';
+        $state_file = $this->glossary_state_file_read();
+
+        if (!file_exists($state_file)) return '';
 
         $key = $src . "_" . $target;
 
-        $raw_json = file_get_contents(DOKU_CONF . 'deepl-glossaries.json');
+        $raw_json = file_get_contents($state_file);
         $content = json_decode($raw_json, true);
 
         if (array_key_exists($key, $content)) {
@@ -440,8 +469,10 @@ class action_plugin_deeplautotranslate extends DokuWiki_Action_Plugin {
     }
 
     private function set_glossary_id($src, $target, $glossary_id): void {
-        if (file_exists(DOKU_CONF . 'deepl-glossaries.json')) {
-            $raw_json = file_get_contents(DOKU_CONF . 'deepl-glossaries.json');
+        $read_file = $this->glossary_state_file_read();
+
+        if (file_exists($read_file)) {
+            $raw_json = file_get_contents($read_file);
             $content = json_decode($raw_json, true);
         } else {
             $content = array();
@@ -452,12 +483,14 @@ class action_plugin_deeplautotranslate extends DokuWiki_Action_Plugin {
         $content[$key] = $glossary_id;
 
         $raw_json = json_encode($content);
-        file_put_contents(DOKU_CONF . 'deepl-glossaries.json', $raw_json);
+        file_put_contents($this->glossary_state_file(), $raw_json);
     }
 
     private function unset_glossary_id($src, $target): void {
-        if (file_exists(DOKU_CONF . 'deepl-glossaries.json')) {
-            $raw_json = file_get_contents(DOKU_CONF . 'deepl-glossaries.json');
+        $read_file = $this->glossary_state_file_read();
+
+        if (file_exists($read_file)) {
+            $raw_json = file_get_contents($read_file);
             $content = json_decode($raw_json, true);
         } else {
             return;
@@ -468,7 +501,7 @@ class action_plugin_deeplautotranslate extends DokuWiki_Action_Plugin {
         unset($content[$key]);
 
         $raw_json = json_encode($content);
-        file_put_contents(DOKU_CONF . 'deepl-glossaries.json', $raw_json);
+        file_put_contents($this->glossary_state_file(), $raw_json);
     }
 
     private function check_in_glossary_ns(): bool {
@@ -708,7 +741,7 @@ class action_plugin_deeplautotranslate extends DokuWiki_Action_Plugin {
                     throw new \Exception($this->getLang('msg_translation_fail_quota_exceeded'), 456);
                 default:
                     if ($this->getConf('api_log_errors')) {
-                        $logger = \dokuwiki\Logger::getInstance('deeplautotranslate');
+                        $logger = \dokuwiki\Logger::getInstance('llmautotranslate');
                         $logger->log("$http->status " . $http->resp_body, $data['text']);
                     }
                     throw new \Exception($this->getLang('msg_translation_fail'), $http->status ?: 500);

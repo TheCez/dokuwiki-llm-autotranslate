@@ -10,6 +10,7 @@ $conf['backend'] = 'llm';
 $conf['llm_api_url'] = 'https://api.openai.com/v1/chat/completions';
 $conf['llm_api_key'] = '';
 $conf['llm_model'] = 'gpt-4o-mini';
+$conf['llm_timeout'] = 120;
 $conf['llm_prompt'] = <<<'PROMPT'
 You are a professional translator for DokuWiki wiki markup.
 Translate the user's text from {{source_lang}} to {{target_lang}}.

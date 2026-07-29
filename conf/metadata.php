@@ -14,6 +14,7 @@ $meta['ignored_expressions'] = array('string');
 $meta['default_lang_in_ns'] = array('onoff');
 $meta['keep_relative'] = array('onoff');
 $meta['bidirectional'] = array('onoff');
+$meta['sync_translations'] = array('onoff');
 
 $meta['backend'] = array('multichoice', '_choices' => array('llm', 'deepl'));
 $meta['llm_api_url'] = array('string');

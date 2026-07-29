@@ -14,6 +14,7 @@ $lang['ignored_expressions'] = 'Ausdrücke, welche nicht übersetzt werden solle
 $lang['default_lang_in_ns'] = 'Die Standardsprache befindet sich in einem Namespace (sollte normalerweise nicht der Fall sein)';
 $lang['keep_relative'] = 'Relative Links beim Übersetzen nicht umschreiben';
 $lang['bidirectional'] = 'Bidirektionale Übersetzung: zwischen allen konfigurierten Sprachen in beide Richtungen übersetzen, wobei die zuletzt bearbeitete vorhandene Seite als Quelle dient (nicht nur die Standardsprache). Der Übersetzungs-Button überträgt die aktuelle Seite dann in alle anderen konfigurierten Sprachen.';
+$lang['sync_translations'] = 'Übersetzungen synchron halten: Wird eine Seite gespeichert, wird sie in die anderen Sprachen neu übersetzt, und wird eine Seite geöffnet, deren Quelle zuletzt neuer bearbeitet wurde, wird sie neu übersetzt. Die zuletzt bearbeitete Sprache gilt als maßgebliche Quelle (ihre Übersetzung überschreibt die anderen).';
 
 $lang['backend'] = 'Zu verwendendes Übersetzungs-Backend';
 $lang['llm_api_url'] = 'LLM-API-URL (OpenAI-kompatibler chat/completions-Endpunkt)';

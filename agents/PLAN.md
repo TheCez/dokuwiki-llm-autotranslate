@@ -167,6 +167,26 @@ from the most recently edited existing sibling (editor and direct modes), and th
 current page to every other configured language from any namespace; both backends receive the
 correct source language and glossary pair; with the toggle off, nothing changes.
 
+### Slice 7 - Keep translations in sync when the source changes
+Opt-in toggle so an existing translation is refreshed when its source changes, instead of being
+generated once and frozen.
+
+- Add `sync_translations` (onoff, default off) to `conf/default.php` + `conf/metadata.php` + en/de
+  settings labels + readme. When off, behavior is unchanged.
+- On save (eager push): new `sync_on_save()` on `COMMON_WIKIPAGE_SAVE` re-translates a saved page
+  into all other configured languages via the existing `push_translate()`; loop-guarded by the
+  plugin's own auto-save summaries and skipping no-op saves/deletions/glossary/non-language pages.
+- On view (lazy pull): `check_do_translation()` also permits an existing page when the source is
+  newer (stale); `autotrans_direct()` re-translates+saves it (direct mode only, no redirect loop).
+- Correctness: the source of truth is the most recently HUMAN-edited sibling - auto-translations
+  are excluded (`is_auto_translation_page()` via the change summary), so both triggers converge
+  without translation-of-translation churn. New pure `SourceSelector::pickSource()` (prefer newest
+  human, fall back to newest auto) with unit tests; `resolve_source()` now also returns `mtime`.
+
+Acceptance: with the toggle on, saving a page updates the other languages; opening a stale page in
+direct mode refreshes it; the newest page is never needlessly re-translated (no churn/loop); most
+recent human edit wins; with the toggle off, nothing changes.
+
 ## Testing strategy
 
 - **Unit (tester subagent, standalone PHP + PHPUnit):** `PromptBuilder`, `LlmClient` (with a
@@ -197,9 +217,32 @@ correct source language and glossary pair; with the toggle off, nothing changes.
 - [x] Slice 4 - Glossary via prompt injection (done)
 - [x] Slice 5 - Hardening, i18n, docs (done; full suite live-green)
 - [x] Slice 6 - Bidirectional translation (done; unit-tested + static-traced)
+- [x] Slice 7 - Keep translations in sync when the source changes (done; unit-tested + static-traced)
 
 ### Notes
 (Record decisions, deviations, and E2E verification results here as slices complete.)
+
+**Slice 7 (done):** Added opt-in `sync_translations` toggle (default off) that refreshes existing
+translations when their source changes, via two triggers. (1) Eager push: new `sync_on_save()` on
+`COMMON_WIKIPAGE_SAVE` re-translates a human-saved language page into every other `push_langs` via
+`push_translate()`; loop-guarded by the plugin's own auto-save summaries (centralized as
+`AUTO_SUMMARY_DIRECT`/`AUTO_SUMMARY_PUSH` constants), and skipping no-op saves (`contentChanged`),
+deletions, the glossary ns, non-language pages, blacklist, and (non-bidirectional) non-default
+sources. (2) Lazy pull: `check_do_translation()` now permits an existing page on the auto path when
+`sync_translations` is on and the resolved source mtime > current page mtime; `autotrans_direct()`
+re-translates+saves it (direct mode only; no redirect loop since the just-saved page becomes newest
+and auto-marked). The key correctness rule: `resolve_source()` now selects the most recently
+HUMAN-edited sibling (auto-translations detected via `is_auto_translation_page()` using the last
+change summary from `PageChangeLog`/`last_change` metadata) so the two triggers converge on the
+real edited page with no translation-of-translation churn - this also improves Slice 6's missing-
+page source pick. New pure `SourceSelector::pickSource()` (prefer newest human, fall back to newest
+auto, first-seen tie-break) with 9 added unit tests; `resolve_source()` returns `mtime` too.
+Verification: full suite green - `OK (73 tests, 95 assertions, 1 skipped)` (the skip is the live
+LLM test with no `.env`); `php -l` clean on all edited files; orchestrator static trace confirmed
+the loop guard (auto-summary early return), no-churn (human-only source), stale comparison, and
+legacy preservation (existing-page decision moved to the method tail; off = unchanged). In-wiki
+manual E2E against a running DokuWiki + live endpoint remains a checkout step, per the environment
+limit noted for earlier slices.
 
 **Slice 6 (done):** Added opt-in `bidirectional` toggle (default off). New pure `SourceSelector`
 (`pickMostRecent(langToMtime)`) unit-tested in `tests/SourceSelectorTest.php` (8 cases:

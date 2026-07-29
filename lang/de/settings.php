@@ -12,6 +12,8 @@ $lang['direct_regex'] = 'Direct-Regex: Alle Seitennamen und Namespaces, auf die 
 $lang['editor_regex'] = 'Editor-Regex: Alle Seitennamen und Namespaces, auf die dieser Regex matched, werden im Editor-Modus übersetzt';
 $lang['ignored_expressions'] = 'Ausdrücke, welche nicht übersetzt werden sollen, separiert von \':\'';
 $lang['default_lang_in_ns'] = 'Die Standardsprache befindet sich in einem Namespace (sollte normalerweise nicht der Fall sein)';
+$lang['keep_relative'] = 'Relative Links beim Übersetzen nicht umschreiben';
+$lang['bidirectional'] = 'Bidirektionale Übersetzung: zwischen allen konfigurierten Sprachen in beide Richtungen übersetzen, wobei die zuletzt bearbeitete vorhandene Seite als Quelle dient (nicht nur die Standardsprache). Der Übersetzungs-Button überträgt die aktuelle Seite dann in alle anderen konfigurierten Sprachen.';
 
 $lang['backend'] = 'Zu verwendendes Übersetzungs-Backend';
 $lang['llm_api_url'] = 'LLM-API-URL (OpenAI-kompatibler chat/completions-Endpunkt)';

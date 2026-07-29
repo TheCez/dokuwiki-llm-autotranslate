@@ -20,5 +20,14 @@ The model's response is validated before use: any preamble, postamble, or markdo
 ## Glossaries
 The glossary namespace and term-table pages work the same for both backends. With the `llm` backend, the term pairs from the glossary page are injected into the prompt via `{{glossary}}` instead of being pushed to DeepL's glossary API.
 
+## Bidirectional translation
+By default a page is only translated from the configured default language into the other
+languages. Enable the `bidirectional` setting to translate between all configured languages in
+both directions: when a page is opened or created in any language namespace and does not yet
+exist, it is translated from whichever sibling version already exists (the most recently edited
+one, if several exist). With this setting on, the "Translate page" button also pushes the current
+page to every other configured language, from any language namespace. When the setting is off,
+behavior is unchanged.
+
 ## Usage and configuration
 For further usage and configuration instructions please visit the [DokuWiki plugin page](https://www.dokuwiki.org/plugin:llmautotranslate) of this plugin.

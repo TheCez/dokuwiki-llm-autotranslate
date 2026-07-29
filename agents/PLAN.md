@@ -239,9 +239,23 @@ source content actually changed; no loop, no wasted calls; toggle off unchanged.
 - [x] Slice 6 - Bidirectional translation (done; unit-tested + static-traced)
 - [x] Slice 7 - Keep translations in sync when the source changes (done; unit-tested + static-traced)
 - [x] Slice 8 - Hash-based re-translation, fixes direct-mode loop (done; unit-tested + static-traced)
+- [x] Slice 9 - Fix first-save push (auto-create siblings on a new page's first save) (done)
 
 ### Notes
 (Record decisions, deviations, and E2E verification results here as slices complete.)
+
+**Slice 9 (done):** Fixed a bug where saving the FIRST version of a brand-new page in a language
+namespace failed to auto-create the sibling translations and showed a red "Failed push translate
+checks" error. Root cause: `check_do_push_translate()` gated on the global `$INFO['exists']`, which
+DokuWiki computes at request start; on a new page's first save `$INFO['exists']` is still false, so
+during `COMMON_WIKIPAGE_SAVE` the `sync_on_save()` -> `push_translate()` -> `check_do_push_translate()`
+chain returned false and threw. Editing an existing page worked because `$INFO['exists']` was true.
+Fix (one line): check the live `page_exists($ID)` instead of `$INFO['exists']` (the page is on disk
+by the AFTER hook; in interactive contexts the two are equivalent), and drop the now-unused
+`global $INFO;`. Verified: `php -l` clean; full suite green `OK (82 tests, 104 assertions, 1
+skipped)` (pure classes unaffected); static trace confirms the first-save push now passes and
+propagates to the other languages, and every propagated auto-save is still caught by the
+auto-summary loop guard. In-wiki E2E remains a checkout step per the environment limit.
 
 **Slice 8 (done):** Fixed a direct-mode re-translation loop introduced by Slice 7. Root cause:
 staleness used file mtime (a fresh auto-translation is always "newer" than its source) and

@@ -885,9 +885,12 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
 
     private function check_do_push_translate(): bool {
         global $ID;
-        global $INFO;
 
-        if (!$INFO['exists']) return false;
+        // the source page must exist. Use a live page_exists() check rather than $INFO['exists']:
+        // during COMMON_WIKIPAGE_SAVE on a brand-new page's first save, $INFO (computed at request
+        // start) still reports the page as missing, which wrongly blocked propagation to the other
+        // language namespaces. In interactive contexts page_exists($ID) equals $INFO['exists'].
+        if (!page_exists($ID)) return false;
 
         // only allow push translation if the user can edit this page
         $perm = auth_quickaclcheck($ID);

@@ -13,6 +13,7 @@ use \dokuwiki\plugin\llmautotranslate\DokuHttpTransport;
 use \dokuwiki\plugin\llmautotranslate\LlmClient;
 use \dokuwiki\plugin\llmautotranslate\LlmException;
 use \dokuwiki\plugin\llmautotranslate\GlossaryParser;
+use \dokuwiki\plugin\llmautotranslate\SourceSelector;
 use \dokuwiki\plugin\llmautotranslate\PromptBuilder;
 use \dokuwiki\plugin\llmautotranslate\TranslationValidator;
 use \dokuwiki\plugin\llmautotranslate\TranslationValidationException;
@@ -78,7 +79,11 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         $lang_ns = array_shift($split_id);
         // check if we are in a language namespace
         if (array_key_exists($lang_ns, $this->langs)) {
-            if($this->getConf('default_lang_in_ns') and $lang_ns === $this->get_default_lang()) {
+            if ($this->getConf('bidirectional')) {
+                // bidirectional: the button pushes the current page to all other languages,
+                // so show it in any language namespace where push translation is allowed
+                if (!$this->check_do_push_translate()) return;
+            } else if($this->getConf('default_lang_in_ns') and $lang_ns === $this->get_default_lang()) {
                 // if the default lang is in a namespace and we are in that namespace --> check for push translation
                 if (!$this->check_do_push_translate()) return;
             } else {
@@ -110,7 +115,15 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         $lang_ns = array_shift($split_id);
         // check if we are in a language namespace
         if (array_key_exists($lang_ns, $this->langs)) {
-            if($this->getConf('default_lang_in_ns') and $lang_ns === $this->get_default_lang()) {
+            if ($this->getConf('bidirectional')) {
+                // bidirectional: every language namespace is both a pull target (show) and a
+                // push source (translate action / button)
+                if ($event->data == 'translate') {
+                    $this->push_translate_event($event);
+                } else {
+                    $this->autotrans_direct($event);
+                }
+            } else if($this->getConf('default_lang_in_ns') and $lang_ns === $this->get_default_lang()) {
                 // if the default lang is in a namespace and we are in that namespace --> push translate
                 $this->push_translate_event($event);
             } else {
@@ -218,8 +231,9 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         }
 
         $org_page_info = $this->get_org_page_info();
+        if ($org_page_info === null) return;
         try {
-            $translated_text = $this->translate($org_page_info["text"], $this->get_target_lang(), $org_page_info["ns"]);
+            $translated_text = $this->translate($org_page_info["text"], $this->get_target_lang(), $org_page_info["ns"], $org_page_info["lang"]);
         } catch (\Exception $e) {
             msg($e->getMessage(), -1);
             return;
@@ -239,9 +253,10 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         if (!$this->check_do_translation()) return;
 
         $org_page_info = $this->get_org_page_info();
+        if ($org_page_info === null) return;
 
         try {
-            $event->data['tpl'] = $this->translate($org_page_info["text"], $this->get_target_lang(), $org_page_info["ns"]);
+            $event->data['tpl'] = $this->translate($org_page_info["text"], $this->get_target_lang(), $org_page_info["ns"], $org_page_info["lang"]);
         } catch (\Exception $e) {
             msg($e->getMessage(), -1);
             return;
@@ -287,6 +302,21 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
             throw new \Exception($this->getLang('msg_translation_fail_invalid_lang') . $lang, 404);
         }
 
+        // determine the source language of the page being pushed. In legacy (non-bidirectional)
+        // mode the source is always the default language, matching the original behavior.
+        $source_lang = $this->get_default_lang();
+        if ($this->getConf('bidirectional')) {
+            $split_src = explode(':', $id);
+            $src_ns = array_shift($split_src);
+            if (array_key_exists($src_ns, $this->langs)) {
+                $source_lang = $src_ns;
+            }
+            // never translate a page into its own language
+            if ($lang === $source_lang) {
+                return '';
+            }
+        }
+
         if ($this->getConf('default_lang_in_ns')) {
             // if default lang is in ns: replace language namespace in ID
             $split_id = explode(':', $id);
@@ -305,7 +335,7 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
             throw new \Exception($this->getLang('msg_translation_fail_no_permissions') . $lang_id, 403);
         }
 
-        $translated_text = $this->translate($org_page_text, $lang, getNS($id));
+        $translated_text = $this->translate($org_page_text, $lang, getNS($id), $source_lang);
         saveWikiText($lang_id, $translated_text, 'Automatic push translation');
 
         return $lang_id;
@@ -392,19 +422,80 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         return $default_lang;
     }
 
-    private function get_org_page_info(): array {
+    private function get_org_page_info(): ?array {
         global $ID;
 
         $split_id = explode(':', $ID);
         array_shift($split_id);
-        $org_id = implode(':', $split_id);
+        $page_path = implode(':', $split_id);
 
-        // if default lang is in ns: add default ns in front of org id
-        if ($this->getConf('default_lang_in_ns')) {
-            $org_id = $this->get_default_lang() . ':' . $org_id;
+        return $this->resolve_source($this->get_target_lang(), $page_path);
+    }
+
+    /**
+     * Build the page ID of the given page path in the given language namespace.
+     *
+     * Respects default_lang_in_ns: the default language lives at the wiki root when the
+     * setting is off, otherwise every language (incl. the default) sits in its own namespace.
+     */
+    private function build_lang_id($lang, $page_path): string {
+        if (!$this->getConf('default_lang_in_ns') and $lang === $this->get_default_lang()) {
+            return $page_path;
+        }
+        return $lang . ':' . $page_path;
+    }
+
+    /**
+     * The set of configured languages (default language first, then push_langs), deduped.
+     *
+     * @return string[]
+     */
+    private function get_configured_langs(): array {
+        $langs = $this->get_push_langs();
+        array_unshift($langs, $this->get_default_lang());
+        return array_values(array_unique($langs));
+    }
+
+    /**
+     * Resolve the translation source for a target language and page path.
+     *
+     * Non-bidirectional (legacy): the only candidate is the default language, reproducing the
+     * original "translate from the default language" behavior.
+     *
+     * Bidirectional: consider every configured language (except the target); among the ones
+     * whose page exists, pick the most recently edited as the source.
+     *
+     * @return array{lang:string,id:string,ns:string,text:string}|null
+     */
+    private function resolve_source($target_lang, $page_path): ?array {
+        if ($this->getConf('bidirectional')) {
+            $candidates = $this->get_configured_langs();
+        } else {
+            $candidates = array($this->get_default_lang());
         }
 
-        return array("ns" => getNS($org_id), "text" => rawWiki($org_id));
+        $mtimes = array();
+        $ids = array();
+        foreach ($candidates as $lang) {
+            if ($lang === $target_lang) continue;
+            $id = $this->build_lang_id($lang, $page_path);
+            if (!page_exists($id)) continue;
+            $mtimes[$lang] = @filemtime(wikiFN($id));
+            $ids[$lang] = $id;
+        }
+
+        if (empty($mtimes)) return null;
+
+        $chosen = (new SourceSelector())->pickMostRecent($mtimes);
+        if ($chosen === null or !isset($ids[$chosen])) return null;
+
+        $id = $ids[$chosen];
+        return array(
+            'lang' => $chosen,
+            'id'   => $id,
+            'ns'   => getNS($id),
+            'text' => rawWiki($id),
+        );
     }
 
     private function get_available_glossaries(): array {
@@ -590,19 +681,14 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         // only translate if the current page is in a language namespace
         if (!array_key_exists($lang_ns, $this->langs)) return false;
 
-        $org_id = implode(':', $split_id);
-
-        // if default lang is in ns: add default ns in front of org id
-        if ($this->getConf('default_lang_in_ns')) {
-            $org_id = $this->get_default_lang() . ':' . $org_id;
-        }
+        $page_path = implode(':', $split_id);
 
         // no translations for the glossary namespace
         $glossary_ns = $this->get_glossary_ns();
-        if ($glossary_ns and substr($org_id, 0, strlen($glossary_ns)) == $glossary_ns) return false;
+        if ($glossary_ns and substr($page_path, 0, strlen($glossary_ns)) == $glossary_ns) return false;
 
-        // check if the original page exists
-        if (!page_exists($org_id)) return false;
+        // a source page in another language must exist to translate from
+        if ($this->resolve_source($lang_ns, $page_path) === null) return false;
 
         return true;
     }
@@ -618,7 +704,8 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         if ($perm < AUTH_EDIT) return false;
 
         // if default language is in namespace: only allow push translation from that namespace
-        if($this->getConf('default_lang_in_ns')) {
+        // (bidirectional mode lifts this restriction so any language can be a push source)
+        if(!$this->getConf('bidirectional') and $this->getConf('default_lang_in_ns')) {
             $split_id = explode(':', $ID);
             $lang_ns = array_shift($split_id);
 
@@ -728,15 +815,15 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         return true;
     }
 
-    private function translate($text, $target_lang, $org_ns): string {
+    private function translate($text, $target_lang, $org_ns, $source_lang): string {
         if ($this->getConf('backend') === 'llm') {
-            return $this->llm_translate($text, $target_lang, $org_ns);
+            return $this->llm_translate($text, $target_lang, $org_ns, $source_lang);
         }
 
-        return $this->deepl_translate($text, $target_lang, $org_ns);
+        return $this->deepl_translate($text, $target_lang, $org_ns, $source_lang);
     }
 
-    private function llm_translate($text, $target_lang, $org_ns): string {
+    private function llm_translate($text, $target_lang, $org_ns, $source_lang): string {
         $apiUrl = trim($this->getConf('llm_api_url'));
         $apiKey = trim($this->getConf('llm_api_key'));
         $model = trim($this->getConf('llm_model'));
@@ -749,10 +836,10 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
 
         $input = $this->insert_ignore_tags($text);
 
-        $sourceLang = strtoupper(substr($this->get_default_lang(), 0, 2));
+        $sourceLang = isset($this->langs[$source_lang]) ? $this->langs[$source_lang] : strtoupper(substr($source_lang, 0, 2));
         $targetLang = $this->langs[$target_lang];
 
-        $src2 = strtolower(substr($this->get_default_lang(), 0, 2));
+        $src2 = strtolower(substr($source_lang, 0, 2));
         $target2 = strtolower(substr($target_lang, 0, 2));
         $glossary = $this->get_glossary_pairs($src2, $target2);
 
@@ -783,7 +870,7 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         return $this->remove_ignore_tags($validated);
     }
 
-    private function deepl_translate($text, $target_lang, $org_ns): string {
+    private function deepl_translate($text, $target_lang, $org_ns, $source_lang): string {
         if (!trim($this->getConf('api_key'))) {
             throw new \Exception($this->getLang('msg_translation_fail_bad_key'), 400);
         }
@@ -793,7 +880,7 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         $text = $this->insert_ignore_tags($text);
 
         $data = array(
-            'source_lang' => strtoupper(substr($this->get_default_lang(), 0, 2)), // cut of things like "-informal"
+            'source_lang' => strtoupper(substr($source_lang, 0, 2)), // cut of things like "-informal"
             'target_lang' => $this->langs[$target_lang],
             'tag_handling' => 'xml',
             'ignore_tags' => 'ignore',
@@ -803,7 +890,7 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
 
         // check if glossaries are enabled
         if ($this->get_glossary_ns()) {
-            $src = substr($this->get_default_lang(), 0, 2);
+            $src = substr($source_lang, 0, 2);
             $target = substr($target_lang, 0, 2);
             $glossary_id = $this->get_glossary_id($src, $target);
             if ($glossary_id) {

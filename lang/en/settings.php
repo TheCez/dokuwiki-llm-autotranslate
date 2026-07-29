@@ -13,6 +13,7 @@ $lang['editor_regex'] = 'Editor-Regex: All page names and namespaces matching th
 $lang['ignored_expressions'] = 'Expressions that won\'t be translated, seperated by \':\'';
 $lang['default_lang_in_ns'] = 'The default language is in a namespace (should normally not be the case)';
 $lang['keep_relative'] = 'Do not rewrite relative links when translating';
+$lang['bidirectional'] = 'Bidirectional translation: translate between all configured languages in both directions, using the most recently edited existing page as the source (not only the default language). The translate button then pushes the current page to all other configured languages.';
 
 $lang['backend'] = 'Translation backend to use';
 $lang['llm_api_url'] = 'LLM API URL (OpenAI-compatible chat/completions endpoint)';

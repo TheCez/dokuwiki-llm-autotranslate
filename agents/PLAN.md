@@ -149,6 +149,24 @@ Finish the edges.
 Acceptance: clean i18n, actionable error messages, updated docs, green tests, and a manual E2E
 pass recorded in this file's notes.
 
+### Slice 6 - Bidirectional translation
+Opt-in toggle so translation flows between all configured languages in both directions, not only
+from the default language.
+
+- Add `bidirectional` (onoff, default off) to `conf/default.php` + `conf/metadata.php` + en/de
+  settings labels. When off, behavior is byte-for-byte identical to before.
+- New pure class `SourceSelector` (most-recently-edited pick) with unit tests.
+- `action.php`: source-aware `resolve_source()` / `get_org_page_info()` / `check_do_translation()`;
+  thread an explicit `$source_lang` through `translate()` / `llm_translate()` / `deepl_translate()`;
+  toggle-guarded routing in `preprocess()` + `add_menu_button()`; bidirectional push
+  (`push_translate()` derives the source from the pushed page and skips self; the default-lang-only
+  push restriction is lifted).
+
+Acceptance: with the toggle on, opening/creating a page in any language namespace auto-translates
+from the most recently edited existing sibling (editor and direct modes), and the button pushes the
+current page to every other configured language from any namespace; both backends receive the
+correct source language and glossary pair; with the toggle off, nothing changes.
+
 ## Testing strategy
 
 - **Unit (tester subagent, standalone PHP + PHPUnit):** `PromptBuilder`, `LlmClient` (with a
@@ -178,9 +196,31 @@ pass recorded in this file's notes.
 - [x] Slice 3 - Direct mode and push translation on LLM (done; live-verified)
 - [x] Slice 4 - Glossary via prompt injection (done)
 - [x] Slice 5 - Hardening, i18n, docs (done; full suite live-green)
+- [x] Slice 6 - Bidirectional translation (done; unit-tested + static-traced)
 
 ### Notes
 (Record decisions, deviations, and E2E verification results here as slices complete.)
+
+**Slice 6 (done):** Added opt-in `bidirectional` toggle (default off). New pure `SourceSelector`
+(`pickMostRecent(langToMtime)`) unit-tested in `tests/SourceSelectorTest.php` (8 cases:
+most-recent, single, empty, both tie orderings, zero timestamps). In `action.php` the source
+language is no longer assumed to be the default: `resolve_source($target,$path)` gathers the
+configured languages (default first, then `push_langs`), skips the target, and picks the
+most-recently-edited existing sibling via `SourceSelector`; when the toggle is off the only
+candidate is the default language, exactly reproducing the old lookup. The chosen source language
+is threaded explicitly through `translate()`/`llm_translate()`/`deepl_translate()` (fixes the old
+inconsistency where source used `substr(default,0,2)` and target used the `$langs` map; DeepL's
+`source_lang` still uses the 2-letter form). Routing in `preprocess()` + `add_menu_button()` and
+the `check_do_push_translate()` default-lang restriction are all guarded by the toggle so legacy
+mode is untouched; under bidirectional every language namespace is a pull target on `show` and a
+push source on `translate`, and `push_translate()` derives the source from the pushed page and
+skips self-translation. Also backfilled the missing German `keep_relative` settings label.
+Verification: full suite green - `OK (64 tests, 86 assertions, 1 skipped)` (the 1 skip is the live
+LLM test with no `.env`); `php -l` clean on all edited files; orchestrator line-by-line static
+trace of both toggle states (legacy preserved; both pull directions and bidirectional push
+correct; no redirect loop since the target exists after the direct-mode save). In-wiki manual E2E
+against a running DokuWiki + live endpoint remains a checkout step, per the same environment limit
+noted for earlier slices.
 
 **Slice 5 (done):** Made `TranslationValidator::extractIgnoreBlocks()` nesting-aware (depth-tracked
 scan returning top-level balanced blocks incl. nested content; malformed input handled without

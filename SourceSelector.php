@@ -29,4 +29,33 @@ class SourceSelector {
         }
         return $best;
     }
+
+    /**
+     * Choose the source language among sibling candidates.
+     *
+     * Prefers the most recently edited HUMAN-authored page (auto === false); only if there is no
+     * human-authored candidate does it fall back to the most recently edited auto-translation.
+     * Returns null for an empty list. On ties the first-seen candidate wins, so callers that pass
+     * candidates in preference order (e.g. default language first) get a deterministic result.
+     *
+     * @param array<int,array{lang:string,mtime:int,auto:bool}> $candidates
+     * @return string|null
+     */
+    public function pickSource(array $candidates): ?string {
+        $bestHuman = null; $bestHumanMtime = null;
+        $bestAny = null;   $bestAnyMtime = null;
+        foreach ($candidates as $c) {
+            $lang = $c['lang'];
+            $mtime = $c['mtime'];
+            if ($bestAnyMtime === null or $mtime > $bestAnyMtime) {
+                $bestAny = $lang; $bestAnyMtime = $mtime;
+            }
+            if (empty($c['auto'])) {
+                if ($bestHumanMtime === null or $mtime > $bestHumanMtime) {
+                    $bestHuman = $lang; $bestHumanMtime = $mtime;
+                }
+            }
+        }
+        return $bestHuman !== null ? $bestHuman : $bestAny;
+    }
 }

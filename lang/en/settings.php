@@ -14,6 +14,7 @@ $lang['ignored_expressions'] = 'Expressions that won\'t be translated, seperated
 $lang['default_lang_in_ns'] = 'The default language is in a namespace (should normally not be the case)';
 $lang['keep_relative'] = 'Do not rewrite relative links when translating';
 $lang['bidirectional'] = 'Bidirectional translation: translate between all configured languages in both directions, using the most recently edited existing page as the source (not only the default language). The translate button then pushes the current page to all other configured languages.';
+$lang['sync_translations'] = 'Keep translations in sync: when a page is saved, re-translate it into the other languages, and when a page is opened whose source was edited more recently, re-translate it. The most recently edited language is treated as the source of truth (its translation overwrites the others).';
 
 $lang['backend'] = 'Translation backend to use';
 $lang['llm_api_url'] = 'LLM API URL (OpenAI-compatible chat/completions endpoint)';

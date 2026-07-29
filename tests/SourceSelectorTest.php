@@ -68,4 +68,99 @@ class SourceSelectorTest extends TestCase {
 
         $this->assertSame('de', $result);
     }
+
+    public function testPickSourcePrefersMostRecentHumanOverNewerAuto(): void {
+        $selector = new SourceSelector();
+
+        $result = $selector->pickSource([
+            ['lang' => 'de', 'mtime' => 100, 'auto' => false],
+            ['lang' => 'en', 'mtime' => 500, 'auto' => true],
+        ]);
+
+        $this->assertSame('de', $result);
+    }
+
+    public function testPickSourceAmongMultipleHumansNewestWins(): void {
+        $selector = new SourceSelector();
+
+        $result = $selector->pickSource([
+            ['lang' => 'de', 'mtime' => 100, 'auto' => false],
+            ['lang' => 'fr', 'mtime' => 300, 'auto' => false],
+        ]);
+
+        $this->assertSame('fr', $result);
+    }
+
+    public function testPickSourceFallsBackToNewestAutoWhenNoHuman(): void {
+        $selector = new SourceSelector();
+
+        $result = $selector->pickSource([
+            ['lang' => 'en', 'mtime' => 200, 'auto' => true],
+            ['lang' => 'fr', 'mtime' => 400, 'auto' => true],
+        ]);
+
+        $this->assertSame('fr', $result);
+    }
+
+    public function testPickSourceEmptyListReturnsNull(): void {
+        $selector = new SourceSelector();
+
+        $result = $selector->pickSource([]);
+
+        $this->assertNull($result);
+    }
+
+    public function testPickSourceSingleHumanCandidateIsReturned(): void {
+        $selector = new SourceSelector();
+
+        $result = $selector->pickSource([
+            ['lang' => 'de', 'mtime' => 42, 'auto' => false],
+        ]);
+
+        $this->assertSame('de', $result);
+    }
+
+    public function testPickSourceSingleAutoCandidateIsReturnedAsFallback(): void {
+        $selector = new SourceSelector();
+
+        $result = $selector->pickSource([
+            ['lang' => 'de', 'mtime' => 42, 'auto' => true],
+        ]);
+
+        $this->assertSame('de', $result);
+    }
+
+    public function testPickSourceHumanTieResolvesToFirstSeen(): void {
+        $selector = new SourceSelector();
+
+        $result = $selector->pickSource([
+            ['lang' => 'de', 'mtime' => 500, 'auto' => false],
+            ['lang' => 'en', 'mtime' => 500, 'auto' => false],
+        ]);
+
+        $this->assertSame('de', $result);
+    }
+
+    public function testPickSourceHumanTieResolvesToFirstSeenInReverseInsertionOrder(): void {
+        $selector = new SourceSelector();
+
+        $result = $selector->pickSource([
+            ['lang' => 'en', 'mtime' => 500, 'auto' => false],
+            ['lang' => 'de', 'mtime' => 500, 'auto' => false],
+        ]);
+
+        $this->assertSame('en', $result);
+    }
+
+    public function testPickSourceNewestAutoDoesNotSuppressOlderHumanAmongThreeCandidates(): void {
+        $selector = new SourceSelector();
+
+        $result = $selector->pickSource([
+            ['lang' => 'de', 'mtime' => 100, 'auto' => false],
+            ['lang' => 'en', 'mtime' => 400, 'auto' => true],
+            ['lang' => 'fr', 'mtime' => 600, 'auto' => true],
+        ]);
+
+        $this->assertSame('de', $result);
+    }
 }

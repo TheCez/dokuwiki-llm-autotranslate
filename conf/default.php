@@ -6,6 +6,7 @@ $conf['api_log_errors'] = 0;
 $conf['show_button'] = true;
 $conf['keep_relative'] = 0;
 $conf['bidirectional'] = 0;
+$conf['sync_translations'] = 0;
 
 $conf['backend'] = 'llm';
 $conf['llm_api_url'] = 'https://api.openai.com/v1/chat/completions';

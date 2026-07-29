@@ -20,6 +20,12 @@ use \dokuwiki\plugin\llmautotranslate\TranslationValidationException;
 
 class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
 
+    // change summaries the plugin stamps on its own automatic saves; used both as a loop guard
+    // in sync_on_save() and to recognise auto-translated pages that must not be treated as a
+    // translation source.
+    const AUTO_SUMMARY_DIRECT = 'Automatic translation';
+    const AUTO_SUMMARY_PUSH   = 'Automatic push translation';
+
     // manual mapping of ISO-languages to DeepL-languages to fix inconsistent naming
     private $langs = array(
         'bg' => 'BG',
@@ -59,6 +65,7 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         $controller->register_hook('ACTION_ACT_PREPROCESS','BEFORE', $this, 'preprocess');
         $controller->register_hook('COMMON_PAGETPL_LOAD','AFTER', $this, 'pagetpl_load');
         $controller->register_hook('COMMON_WIKIPAGE_SAVE','AFTER', $this, 'update_glossary');
+        $controller->register_hook('COMMON_WIKIPAGE_SAVE','AFTER', $this, 'sync_on_save');
         $controller->register_hook('MENU_ITEMS_ASSEMBLY', 'AFTER', $this, 'add_menu_button');
     }
 
@@ -239,7 +246,7 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
             return;
         }
 
-        saveWikiText($ID, $translated_text, 'Automatic translation');
+        saveWikiText($ID, $translated_text, self::AUTO_SUMMARY_DIRECT);
 
         msg($this->getLang('msg_translation_success'), 1);
 
@@ -336,9 +343,70 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         }
 
         $translated_text = $this->translate($org_page_text, $lang, getNS($id), $source_lang);
-        saveWikiText($lang_id, $translated_text, 'Automatic push translation');
+        saveWikiText($lang_id, $translated_text, self::AUTO_SUMMARY_PUSH);
 
         return $lang_id;
+    }
+
+    /**
+     * On save of a human-edited page, re-translate it into all other configured languages.
+     *
+     * Gated on the sync_translations toggle. Skips the plugin's own automatic saves (loop guard),
+     * no-op saves, deletions, the glossary namespace, non-language pages, and blacklisted pages.
+     * In non-bidirectional mode only the default language is authoritative, so only saves of the
+     * default language propagate.
+     */
+    public function sync_on_save(Doku_Event $event): void {
+        if (!$this->getConf('sync_translations')) return;
+
+        $data = $event->data;
+        $id = isset($data['id']) ? $data['id'] : '';
+        if ($id === '') return;
+
+        // loop guard: ignore the plugin's own automatic saves
+        $summary = isset($data['summary']) ? $data['summary'] : '';
+        if ($summary === self::AUTO_SUMMARY_DIRECT or $summary === self::AUTO_SUMMARY_PUSH) return;
+
+        // skip deletions
+        if (isset($data['changeType']) and $data['changeType'] == DOKU_CHANGE_TYPE_DELETE) return;
+
+        // skip no-op saves (fall back to comparing old/new content if the flag is absent)
+        if (array_key_exists('contentChanged', $data)) {
+            if (!$data['contentChanged']) return;
+        } else if (isset($data['oldContent']) and isset($data['newContent'])
+                   and $data['oldContent'] === $data['newContent']) {
+            return;
+        }
+
+        // no translations for the glossary namespace
+        $glossary_ns = $this->get_glossary_ns();
+        if ($glossary_ns and substr($id, 0, strlen($glossary_ns)) == $glossary_ns) return;
+
+        // must be in a language namespace
+        $split_id = explode(':', $id);
+        $src_lang = array_shift($split_id);
+        if (!array_key_exists($src_lang, $this->langs)) return;
+
+        // in non-bidirectional mode only the default language is an authoritative source
+        if (!$this->getConf('bidirectional') and $src_lang !== $this->get_default_lang()) return;
+
+        // skip blacklisted namespaces and pages
+        if ($this->getConf('blacklist_regex')) {
+            if (preg_match('/' . $this->getConf('blacklist_regex') . '/', $id) === 1) return;
+        }
+
+        $new_text = isset($data['newContent']) ? $data['newContent'] : rawWiki($id);
+
+        // propagate to every other configured language
+        $push_langs = $this->get_push_langs();
+        foreach ($push_langs as $lang) {
+            if ($lang === $src_lang) continue;
+            try {
+                $this->push_translate($id, $new_text, $lang);
+            } catch (\Exception $e) {
+                msg($e->getMessage(), -1);
+            }
+        }
     }
 
     private function handle_glossary_init(Doku_Event $event): void {
@@ -474,28 +542,56 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
             $candidates = array($this->get_default_lang());
         }
 
-        $mtimes = array();
+        $found = array();
         $ids = array();
         foreach ($candidates as $lang) {
             if ($lang === $target_lang) continue;
             $id = $this->build_lang_id($lang, $page_path);
             if (!page_exists($id)) continue;
-            $mtimes[$lang] = @filemtime(wikiFN($id));
-            $ids[$lang] = $id;
+            $mtime = @filemtime(wikiFN($id));
+            $found[] = array(
+                'lang'  => $lang,
+                'mtime' => $mtime,
+                'auto'  => $this->is_auto_translation_page($id),
+            );
+            $ids[$lang] = array('id' => $id, 'mtime' => $mtime);
         }
 
-        if (empty($mtimes)) return null;
+        if (empty($found)) return null;
 
-        $chosen = (new SourceSelector())->pickMostRecent($mtimes);
+        // prefer the most recently edited human-authored sibling; never source from an
+        // auto-translation unless there is no human-authored candidate at all
+        $chosen = (new SourceSelector())->pickSource($found);
         if ($chosen === null or !isset($ids[$chosen])) return null;
 
-        $id = $ids[$chosen];
+        $id = $ids[$chosen]['id'];
         return array(
-            'lang' => $chosen,
-            'id'   => $id,
-            'ns'   => getNS($id),
-            'text' => rawWiki($id),
+            'lang'  => $chosen,
+            'id'    => $id,
+            'ns'    => getNS($id),
+            'text'  => rawWiki($id),
+            'mtime' => $ids[$chosen]['mtime'],
         );
+    }
+
+    /**
+     * Is the given page's latest revision one of the plugin's own automatic translation saves?
+     *
+     * Used so an auto-translated page is not treated as a translation source (which would cause
+     * translation-of-translation and, with sync on both save and view, an endless loop).
+     */
+    private function is_auto_translation_page($id): bool {
+        $sum = '';
+        if (class_exists('\\dokuwiki\\ChangeLog\\PageChangeLog')) {
+            $changelog = new \dokuwiki\ChangeLog\PageChangeLog($id);
+            $info = $changelog->getCurrentRevisionInfo();
+            if (is_array($info) and isset($info['sum'])) $sum = $info['sum'];
+        }
+        if ($sum === '') {
+            $last = p_get_metadata($id, 'last_change');
+            if (is_array($last) and isset($last['sum'])) $sum = $last['sum'];
+        }
+        return $sum === self::AUTO_SUMMARY_DIRECT or $sum === self::AUTO_SUMMARY_PUSH;
     }
 
     private function get_available_glossaries(): array {
@@ -664,9 +760,6 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         global $INFO;
         global $ID;
 
-        // only translate if the current page does not exist
-        if ($INFO['exists'] and !$allow_existing) return false;
-
         // permission check
         $perm = auth_quickaclcheck($ID);
         if (($INFO['exists'] and $perm < AUTH_EDIT) or (!$INFO['exists'] and $perm < AUTH_CREATE)) return false;
@@ -688,9 +781,16 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         if ($glossary_ns and substr($page_path, 0, strlen($glossary_ns)) == $glossary_ns) return false;
 
         // a source page in another language must exist to translate from
-        if ($this->resolve_source($lang_ns, $page_path) === null) return false;
+        $source = $this->resolve_source($lang_ns, $page_path);
+        if ($source === null) return false;
 
-        return true;
+        // new page, or an explicit forced translation (button): always translate
+        if (!$INFO['exists'] or $allow_existing) return true;
+
+        // existing page on the automatic path: only re-translate when syncing is enabled and the
+        // source was edited more recently than this page (i.e. this page is stale)
+        if (!$this->getConf('sync_translations')) return false;
+        return $source['mtime'] > @filemtime(wikiFN($ID));
     }
 
     private function check_do_push_translate(): bool {

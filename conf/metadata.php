@@ -1,7 +1,7 @@
 <?php
 
-// password type so the key is masked in the config manager and never rendered into the page HTML
-$meta['api_key'] = array('password');
+// custom password setting: masked, never rendered into the HTML, and shows a placeholder when set
+$meta['api_key'] = array('\dokuwiki\plugin\llmautotranslate\SettingApikey');
 $meta['api'] = array('multichoice', '_choices' => array('free', 'pro'));
 $meta['api_log_errors'] = array('onoff');
 $meta['mode'] = array('multichoice', '_choices' => array('direct', 'editor'));
@@ -19,8 +19,8 @@ $meta['sync_translations'] = array('onoff');
 
 $meta['backend'] = array('multichoice', '_choices' => array('llm', 'deepl'));
 $meta['llm_api_url'] = array('string');
-// password type so the key is masked in the config manager and never rendered into the page HTML
-$meta['llm_api_key'] = array('password');
+// custom password setting: masked, never rendered into the HTML, and shows a placeholder when set
+$meta['llm_api_key'] = array('\dokuwiki\plugin\llmautotranslate\SettingApikey');
 $meta['llm_model'] = array('string');
 $meta['llm_timeout'] = array('numeric');
 // DokuWiki core config manager has no multiline type; a single-line string is acceptable for now.

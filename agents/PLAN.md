@@ -241,9 +241,28 @@ source content actually changed; no loop, no wasted calls; toggle off unchanged.
 - [x] Slice 8 - Hash-based re-translation, fixes direct-mode loop (done; unit-tested + static-traced)
 - [x] Slice 9 - Fix first-save push (auto-create siblings on a new page's first save) (done)
 - [x] Slice 10 - Mask API keys in the config manager (password setting type) (done)
+- [x] Slice 11 - Masked "value is set" placeholder for stored API keys (done)
 
 ### Notes
 (Record decisions, deviations, and E2E verification results here as slices complete.)
+
+**Slice 11 (done):** Follow-up to Slice 10. With the plain `password` type the key field is blank
+after saving, giving no cue that a key is set. Added a custom config-manager setting class
+`SettingApikey` (plugin root) extending core `\dokuwiki\plugin\config\core\Setting\SettingPassword`;
+`conf/metadata.php` now references it by FQCN for `api_key` and `llm_api_key`. Verified against
+DokuWiki source (splitbrain/dokuwiki master): `Configuration::determineClassName()` resolves a
+metadata type that is a fully-qualified class via its `class_exists($class)` branch; the base
+`Setting::$local` is `protected` (safe to read from the subclass); `SettingPassword::html()` always
+renders `value=""` with a stable `type="password"` anchor. The override calls `parent::html()` and,
+only when a value is stored (`!isProtected() && !empty($this->local)`), injects a decorative
+`placeholder="&#x2022;..."` after `type="password"`. The real key is still never sent to the
+browser and an empty submit still keeps the stored value (inherited `update()`), so this is a
+purely cosmetic "a key is set" hint. Fallback-safe: if anything about the parent changes, the
+placeholder simply does not appear - it can neither expose the key nor break the field. Custom class
+autoloads from the plugin root like the other plugin classes. Verified: `php -l` clean; full suite
+green `OK (82 tests, 104 assertions, 1 skipped)`. In-wiki confirmation (open Settings Manager: field
+shows the bullet placeholder when a key is saved, blank when not, and view-source shows no value)
+remains a checkout step - no running DokuWiki in this environment.
 
 **Slice 10 (done):** Security - the API keys were declared as `string` settings, so the config
 manager printed the stored key into the page HTML in cleartext (any admin could read/copy it).

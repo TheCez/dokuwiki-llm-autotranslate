@@ -240,9 +240,23 @@ source content actually changed; no loop, no wasted calls; toggle off unchanged.
 - [x] Slice 7 - Keep translations in sync when the source changes (done; unit-tested + static-traced)
 - [x] Slice 8 - Hash-based re-translation, fixes direct-mode loop (done; unit-tested + static-traced)
 - [x] Slice 9 - Fix first-save push (auto-create siblings on a new page's first save) (done)
+- [x] Slice 10 - Mask API keys in the config manager (password setting type) (done)
 
 ### Notes
 (Record decisions, deviations, and E2E verification results here as slices complete.)
+
+**Slice 10 (done):** Security - the API keys were declared as `string` settings, so the config
+manager printed the stored key into the page HTML in cleartext (any admin could read/copy it).
+Changed `api_key` (DeepL) and `llm_api_key` in `conf/metadata.php` from `array('string')` to
+`array('password')`. DokuWiki's password setting type renders `<input type="password">`, does NOT
+emit the stored value into the HTML (field comes up blank/masked), and keeps the existing value
+when the field is left blank on save - so the key is no longer readable from the settings screen.
+No code/logic change; the stored value keeps working. Verified `php -l` clean. KNOWN LIMITATION
+(communicated to the user): this is UI masking only - the key is still stored in plaintext in
+`conf/local.php` and DokuWiki config access is all-or-nothing, so a fully-privileged co-superadmin
+can still recover it (via filesystem/plugin install). True isolation from other admins would
+require keeping the key out of DokuWiki entirely (env var / server-side file read by the plugin) -
+deferred unless the threat model requires it.
 
 **Slice 9 (done):** Fixed a bug where saving the FIRST version of a brand-new page in a language
 namespace failed to auto-create the sibling translations and showed a red "Failed push translate

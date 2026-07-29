@@ -35,13 +35,15 @@ alone, so editing the source later leaves the other languages stale. Enable the
 `sync_translations` setting to keep them current:
 
 - When a page is saved, it is re-translated into every other configured language.
-- When a page is opened whose source was edited more recently than it, it is re-translated (in
-  direct mode this happens automatically on view; in editor mode existing pages are refreshed by
-  the on-save propagation).
+- When a translated page is opened, it is re-translated only if the source it was generated from
+  has actually changed since (detected by a content hash, so unchanged pages are never
+  re-translated and no tokens are wasted). In direct mode this happens automatically on view; in
+  editor mode existing pages are refreshed by the on-save propagation.
 
-The most recently **edited by a human** language is treated as the source of truth - its
-translation overwrites the others, and pages the plugin itself auto-translated are never used as a
-source. When the setting is off, behavior is unchanged.
+Each translation records which page it was generated from and a hash of that source. A page that is
+not a translation - an original, or a translation a human has since edited - is treated as the
+source of truth and its content is propagated to the other languages. When the setting is off,
+behavior is unchanged.
 
 ## Usage and configuration
 For further usage and configuration instructions please visit the [DokuWiki plugin page](https://www.dokuwiki.org/plugin:llmautotranslate) of this plugin.

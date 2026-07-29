@@ -187,6 +187,26 @@ Acceptance: with the toggle on, saving a page updates the other languages; openi
 direct mode refreshes it; the newest page is never needlessly re-translated (no churn/loop); most
 recent human edit wins; with the toggle off, nothing changes.
 
+### Slice 8 - Hash-based re-translation (fix the direct-mode loop)
+Slice 7's mtime staleness + auto-fallback re-translated originals from their own translations,
+ping-ponging endlessly in direct mode and wasting tokens. Replace mtime with content-hash change
+detection.
+
+- New pure `ContentHasher` (normalize line endings + trim, then md5) with unit tests.
+- Per-page persistent metadata (`llmautotranslate` key): `{source_id, source_hash, output_hash}`
+  recorded on every generated translation (`autotrans_direct()`, `push_translate()`, and the
+  `autotrans_editor()` filled template).
+- `is_stale($id)` = the recorded source's current content hash differs from the stored one;
+  originals (no `source_id`) are never stale. `check_do_translation()` uses it instead of mtime.
+- `get_org_page_info()` re-translates an existing translation from its recorded source.
+- `sync_on_save()`: an untouched translation (content still matches `output_hash`) does not
+  propagate; a human-edited one clears its provenance (becomes authoritative) and propagates.
+- `is_auto_translation_page()` is now metadata-based (summary fallback for legacy pages). Same
+  `sync_translations` toggle; no config/lang changes.
+
+Acceptance: opening the original never re-translates it; a translation refreshes only when its
+source content actually changed; no loop, no wasted calls; toggle off unchanged.
+
 ## Testing strategy
 
 - **Unit (tester subagent, standalone PHP + PHPUnit):** `PromptBuilder`, `LlmClient` (with a
@@ -218,9 +238,34 @@ recent human edit wins; with the toggle off, nothing changes.
 - [x] Slice 5 - Hardening, i18n, docs (done; full suite live-green)
 - [x] Slice 6 - Bidirectional translation (done; unit-tested + static-traced)
 - [x] Slice 7 - Keep translations in sync when the source changes (done; unit-tested + static-traced)
+- [x] Slice 8 - Hash-based re-translation, fixes direct-mode loop (done; unit-tested + static-traced)
 
 ### Notes
 (Record decisions, deviations, and E2E verification results here as slices complete.)
+
+**Slice 8 (done):** Fixed a direct-mode re-translation loop introduced by Slice 7. Root cause:
+staleness used file mtime (a fresh auto-translation is always "newer" than its source) and
+`pickSource` fell back to an auto-translation as the source, so opening the original re-translated
+it from its own translation, flipping both pages to auto-marked and ping-ponging forever - burning
+tokens with no content change. Fix (user chose hash-based, keep on-view refresh, edited translation
+becomes source): new pure `ContentHasher` (normalize `\r\n`/`\r`->`\n` + trim, then md5; 9 unit
+tests). Per-page persistent metadata `llmautotranslate = {source_id, source_hash, output_hash}` is
+recorded on every generated translation (autotrans_direct, push_translate, autotrans_editor filled
+template). `is_stale($id)` compares the recorded source's current content hash to the stored one;
+originals (no source_id) are never stale, so opening `de` no longer re-translates it (the bug).
+`check_do_translation()` uses `is_stale()` instead of the mtime comparison; `get_org_page_info()`
+re-translates an existing translation from its recorded source; `sync_on_save()` skips propagation
+for an untouched translation (content still matches `output_hash`) and, for a human-edited one,
+clears provenance (making it authoritative) before propagating; `is_auto_translation_page()` is now
+metadata-based (changelog-summary fallback for pre-metadata pages). Same `sync_translations`
+toggle; no config/lang changes. Verification: full suite green - `OK (82 tests, 104 assertions,
+1 skipped)` (the skip is the live LLM test with no `.env`); `php -l` clean; orchestrator traced the
+reported loop on the old code and confirmed the fix removes it (open en -> translate once; reopen
+en -> nothing; open de original -> nothing [was the bug]; edit de+save -> en updates once), plus the
+bidirectional most-recent-wins edit path is loop-free. KNOWN LIMITATION requiring in-wiki
+confirmation: whether persistent metadata set at editor-fill time (page not yet saved) survives the
+first save - if it does not, accepting an editor-filled translation unchanged would propagate back
+to the source (editor mode only; the reported direct-mode bug is unaffected and fully fixed).
 
 **Slice 7 (done):** Added opt-in `sync_translations` toggle (default off) that refreshes existing
 translations when their source changes, via two triggers. (1) Eager push: new `sync_on_save()` on

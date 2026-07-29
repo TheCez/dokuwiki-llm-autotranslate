@@ -14,6 +14,7 @@ use \dokuwiki\plugin\llmautotranslate\LlmClient;
 use \dokuwiki\plugin\llmautotranslate\LlmException;
 use \dokuwiki\plugin\llmautotranslate\GlossaryParser;
 use \dokuwiki\plugin\llmautotranslate\SourceSelector;
+use \dokuwiki\plugin\llmautotranslate\ContentHasher;
 use \dokuwiki\plugin\llmautotranslate\PromptBuilder;
 use \dokuwiki\plugin\llmautotranslate\TranslationValidator;
 use \dokuwiki\plugin\llmautotranslate\TranslationValidationException;
@@ -25,6 +26,9 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
     // translation source.
     const AUTO_SUMMARY_DIRECT = 'Automatic translation';
     const AUTO_SUMMARY_PUSH   = 'Automatic push translation';
+
+    // persistent page-metadata key holding translation provenance for the sync feature
+    const META_KEY = 'llmautotranslate';
 
     // manual mapping of ISO-languages to DeepL-languages to fix inconsistent naming
     private $langs = array(
@@ -247,6 +251,7 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         }
 
         saveWikiText($ID, $translated_text, self::AUTO_SUMMARY_DIRECT);
+        $this->set_translation_meta($ID, $org_page_info['id'], $org_page_info['text'], $translated_text);
 
         msg($this->getLang('msg_translation_success'), 1);
 
@@ -255,6 +260,8 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
     }
 
     private function autotrans_editor(Doku_Event $event): void {
+        global $ID;
+
         if ($this->get_mode() != 'editor') return;
 
         if (!$this->check_do_translation()) return;
@@ -268,6 +275,10 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
             msg($e->getMessage(), -1);
             return;
         }
+
+        // record provenance so a later unchanged save of this filled page is recognised as a
+        // faithful translation, not human authoring that would overwrite the source
+        $this->set_translation_meta($ID, $org_page_info['id'], $org_page_info['text'], $event->data['tpl']);
     }
 
     private function push_translate_event(Doku_Event $event): void {
@@ -344,6 +355,7 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
 
         $translated_text = $this->translate($org_page_text, $lang, getNS($id), $source_lang);
         saveWikiText($lang_id, $translated_text, self::AUTO_SUMMARY_PUSH);
+        $this->set_translation_meta($lang_id, $id, $org_page_text, $translated_text);
 
         return $lang_id;
     }
@@ -396,6 +408,18 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         }
 
         $new_text = isset($data['newContent']) ? $data['newContent'] : rawWiki($id);
+
+        // if this page is a translation we generated and the human did not change it (content
+        // still matches what we produced), do not propagate - otherwise it would overwrite the
+        // very source it was translated from
+        $meta = $this->get_translation_meta($id);
+        if (!empty($meta['source_id'])) {
+            if (isset($meta['output_hash']) and (new ContentHasher())->hash($new_text) === $meta['output_hash']) {
+                return;
+            }
+            // the human edited this translation -> it becomes the authoritative source
+            $this->clear_translation_meta($id);
+        }
 
         // propagate to every other configured language
         $push_langs = $this->get_push_langs();
@@ -493,6 +517,22 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
     private function get_org_page_info(): ?array {
         global $ID;
 
+        // for an existing translation, re-translate from the source it was generated from (the
+        // same source its staleness hash tracks) rather than re-resolving the newest sibling
+        $meta = $this->get_translation_meta($ID);
+        if (!empty($meta['source_id']) and page_exists($meta['source_id'])) {
+            $src_id = $meta['source_id'];
+            $src_split = explode(':', $src_id);
+            $src_lang = array_shift($src_split);
+            if (!array_key_exists($src_lang, $this->langs)) $src_lang = $this->get_default_lang();
+            return array(
+                'lang' => $src_lang,
+                'id'   => $src_id,
+                'ns'   => getNS($src_id),
+                'text' => rawWiki($src_id),
+            );
+        }
+
         $split_id = explode(':', $ID);
         array_shift($split_id);
         $page_path = implode(':', $split_id);
@@ -575,12 +615,16 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
     }
 
     /**
-     * Is the given page's latest revision one of the plugin's own automatic translation saves?
+     * Is the given page an auto-generated translation (as opposed to a human-authored source)?
      *
-     * Used so an auto-translated page is not treated as a translation source (which would cause
-     * translation-of-translation and, with sync on both save and view, an endless loop).
+     * Metadata-based: a page carrying our translation provenance (a source_id) is a translation.
+     * Falls back to the change summary of the latest revision for pages translated before the
+     * metadata was introduced.
      */
     private function is_auto_translation_page($id): bool {
+        $meta = $this->get_translation_meta($id);
+        if (!empty($meta['source_id'])) return true;
+
         $sum = '';
         if (class_exists('\\dokuwiki\\ChangeLog\\PageChangeLog')) {
             $changelog = new \dokuwiki\ChangeLog\PageChangeLog($id);
@@ -592,6 +636,52 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
             if (is_array($last) and isset($last['sum'])) $sum = $last['sum'];
         }
         return $sum === self::AUTO_SUMMARY_DIRECT or $sum === self::AUTO_SUMMARY_PUSH;
+    }
+
+    /**
+     * Read the plugin's translation provenance metadata for a page.
+     *
+     * @return array{source_id?:string,source_hash?:string,output_hash?:string}
+     */
+    private function get_translation_meta($id): array {
+        $meta = p_get_metadata($id, self::META_KEY);
+        return is_array($meta) ? $meta : array();
+    }
+
+    /**
+     * Record that $target_id is a translation of $source_id, storing the source content hash (for
+     * staleness) and the produced-output hash (to detect later human edits).
+     */
+    private function set_translation_meta($target_id, $source_id, $source_text, $output_text): void {
+        $hasher = new ContentHasher();
+        p_set_metadata($target_id, array(self::META_KEY => array(
+            'source_id'   => $source_id,
+            'source_hash' => $hasher->hash($source_text),
+            'output_hash' => $hasher->hash($output_text),
+        )));
+    }
+
+    /**
+     * Clear a page's translation provenance, marking it as an authoritative source.
+     */
+    private function clear_translation_meta($id): void {
+        p_set_metadata($id, array(self::META_KEY => array(
+            'source_id'   => '',
+            'source_hash' => '',
+            'output_hash' => '',
+        )));
+    }
+
+    /**
+     * Is the translation at $id out of date - i.e. did its recorded source's content change since
+     * this translation was generated? Originals (no recorded source) are never stale.
+     */
+    private function is_stale($id): bool {
+        $meta = $this->get_translation_meta($id);
+        if (empty($meta['source_id'])) return false;
+        if (!page_exists($meta['source_id'])) return false;
+        $current = (new ContentHasher())->hash(rawWiki($meta['source_id']));
+        return $current !== (isset($meta['source_hash']) ? $meta['source_hash'] : '');
     }
 
     private function get_available_glossaries(): array {
@@ -788,9 +878,9 @@ class action_plugin_llmautotranslate extends DokuWiki_Action_Plugin {
         if (!$INFO['exists'] or $allow_existing) return true;
 
         // existing page on the automatic path: only re-translate when syncing is enabled and the
-        // source was edited more recently than this page (i.e. this page is stale)
+        // recorded source's content actually changed since this translation was generated
         if (!$this->getConf('sync_translations')) return false;
-        return $source['mtime'] > @filemtime(wikiFN($ID));
+        return $this->is_stale($ID);
     }
 
     private function check_do_push_translate(): bool {
